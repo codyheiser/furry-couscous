@@ -46,3 +46,29 @@ def corr_distances(mat1, mat2, plot_out = True):
         
     return mantel_stats
 
+def arcsinh_norm(x, frac = True, scale = 1000):
+    '''
+    Perform an arcsinh-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
+    Useful for feeding into PCA or tSNE.
+        frac = convert to fractional counts first? divide each count by sum of counts for cell.
+        scale = factor to multiply values by before arcsinh-transform. scales values away from [0,1] in order to make arcsinh more effective.
+    '''
+    if !frac:
+        return np.arcsinh(x * scale)
+    
+    else:
+        return np.arcsinh(np.nan_to_num(x / np.sum(x, axis=0)) * scale)
+    
+def log2_norm(x, frac = True):
+    '''
+    Perform a log2-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
+    Useful for feeding into PCA or tSNE.
+        frac = convert to fractional counts first? divide each count by sum of counts for cell.
+    '''
+    if !frac:
+        return np.log2(x + 1)
+    
+    else:
+        return np.log2(np.nan_to_num(x / np.sum(x, axis=0)) + 1)
+    
+    
