@@ -4,6 +4,7 @@
 # November 2018
 
 import numpy as np
+np.seterr(divide='ignore', invalid='ignore') # allow divide by zero for normalization
 # scikit packages
 import skbio
 # plotting packages
@@ -53,7 +54,7 @@ def arcsinh_norm(x, frac = True, scale = 1000):
         frac = convert to fractional counts first? divide each count by sum of counts for cell.
         scale = factor to multiply values by before arcsinh-transform. scales values away from [0,1] in order to make arcsinh more effective.
     '''
-    if !frac:
+    if not frac:
         return np.arcsinh(x * scale)
     
     else:
@@ -65,7 +66,7 @@ def log2_norm(x, frac = True):
     Useful for feeding into PCA or tSNE.
         frac = convert to fractional counts first? divide each count by sum of counts for cell.
     '''
-    if !frac:
+    if not frac:
         return np.log2(x + 1)
     
     else:

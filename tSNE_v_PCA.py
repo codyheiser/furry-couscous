@@ -37,10 +37,10 @@ for rep in reps.keys():
         dm = sc.spatial.distance_matrix(x=reps[rep][key],y=reps[rep][key]) # generate distance matrix for raw data
         
         print('performing PCA for rep {} with closeness {}'.format(rep,key))
-        pca = PCA(n_components=50).fit_transform(np.log2(reps[rep][key]+1)) # perform PCA with 50 components
+        pca = PCA(n_components=50).fit_transform(tSNE_utils.arcsinh_norm(reps[rep][key])) # perform PCA with 50 components
         
         print('clustering PCA results using k-means')
-        pca_clust = KMeans(n_clusters=2).fit_predict(pca[:,1:3]) # TODO: figure out why I need to slice [:,1:3]
+        pca_clust = KMeans(n_clusters=2).fit_predict(pca)
         
         print('generating PCA distance matrix for rep {} with closeness {}'.format(rep,key))
         dm_pca = sc.spatial.distance_matrix(x=pca,y=pca) # generate distance matrix for PCA
@@ -89,5 +89,6 @@ for rep in reps.keys():
         sns.despine(left=True, bottom=True)
         plt.tight_layout()
         plt.savefig('outputs/PCA_v_tSNE_{}_{}.pdf'.format(rep,key))
+        plt.close()
         
 corr_out.to_csv('outputs/tSNE_PCA_correlations.csv')
