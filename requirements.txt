@@ -1,5 +1,7 @@
+absl-py==0.6.1
 anndata==0.6.11
 appnope==0.1.0
+astor==0.7.1
 backcall==0.1.0
 bleach==3.0.2
 CacheControl==0.12.5
@@ -12,6 +14,8 @@ decorator==4.3.0
 defusedxml==0.5.0
 entrypoints==0.2.3
 future==0.17.0
+gast==0.2.0
+grpcio==1.16.0
 h5py==2.8.0
 hdmedians==0.13
 hyperopt==0.1.1
@@ -38,6 +42,7 @@ kopt==0.1.0
 llvmlite==0.25.0
 lockfile==0.12.2
 loompy==2.0.16
+Markdown==3.0.1
 MarkupSafe==1.0
 matplotlib==3.0.1
 mistune==0.8.4
@@ -50,7 +55,7 @@ nose==1.3.7
 notebook==5.7.0
 numba==0.40.1
 numexpr==2.6.8
-numpy==1.13.3
+numpy==1.15.4
 pandas==0.22.0
 pandocfilters==1.4.2
 parso==0.3.1
@@ -59,7 +64,9 @@ pexpect==4.6.0
 pickleshare==0.7.5
 prometheus-client==0.4.2
 prompt-toolkit==2.0.6
+protobuf==3.6.1
 ptyprocess==0.6.0
+pydpc==0.1.3
 Pygments==2.2.0
 pymongo==3.7.2
 pyparsing==2.2.2
@@ -69,6 +76,7 @@ PyYAML==3.13
 pyzmq==17.1.2
 qtconsole==4.4.2
 requests==2.20.0
+rpy2==2.9.4
 scanpy==1.3.2
 scikit-bio==0.5.4
 scikit-learn==0.20.0
@@ -76,19 +84,25 @@ scipy==1.1.0
 scvi==0.2.1
 seaborn==0.9.0
 Send2Trash==1.5.0
+simplegeneric==0.8.1
 six==1.11.0
 sklearn==0.0
 statsmodels==0.9.0
 tables==3.4.4
+tensorboard==1.12.0
+tensorflow==1.12.0
+termcolor==1.1.0
 terminado==0.8.1
 testpath==0.4.2
 torch==0.4.1
 tornado==5.1.1
 tqdm==4.28.1
 traitlets==4.3.2
+tzlocal==1.5.1
 umap-learn==0.3.6
 urllib3==1.24.1
 wcwidth==0.1.7
 webencodings==0.5.1
+Werkzeug==0.14.1
 widgetsnbextension==3.4.2
 xlrd==1.1.0
