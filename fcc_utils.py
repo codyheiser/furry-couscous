@@ -46,7 +46,7 @@ def corr_distances(mat1, mat2, plot_out = True):
         plt.tight_layout()
         plt.show()
         
-    return mantel_stats, EMD
+    return mantel_stats
 
 def arcsinh_norm(x, norm = True, scale = 1000):
     '''
