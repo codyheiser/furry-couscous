@@ -1,65 +1,36 @@
-# furry couscous utility functions
+# furry-couscous utility functions
 
 # @author: C Heiser
 # November 2018
 
+# packages for reading in data files
+import h5py
+# basics
 import numpy as np
+import pandas as pd
 import scipy as sc
 # scikit packages
 from skbio.stats.distance import mantel      	# Mantel test for correlation of Euclidean distance matrices
-from sklearn.preprocessing import normalize
-from sklearn.decomposition import PCA        	# PCA
-from sklearn.manifold import TSNE            	# t-SNE
 from sklearn.metrics import silhouette_score 	# silhouette score for clustering
 # density peak clustering
 from pydpc import Cluster                    	# density-peak clustering
-# DCA packages
-import scanpy.api as scanpy
-from dca.api import dca                      	# DCA
-# UMAP
-import umap                                  	# UMAP
 # plotting packages
 import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns; sns.set(style = 'white')
-# package for reading in data files
-import h5py
+
 
 def read_hdf5(filename):
-    '''read in all replicates in an .hdf5 file'''
-    hdf5in = h5py.File(filename, 'r')
-    hdf5out = {} # initialize empty dictionary
-    for key in list(hdf5in.keys()):
-        hdf5out.update({key:hdf5in[key].value})
-        
-    hdf5in.close()
-    return hdf5out
+		'''read in all replicates in an .hdf5 file'''
+		hdf5in = h5py.File(filename, 'r')
+		hdf5out = {} # initialize empty dictionary
+		for key in list(hdf5in.keys()):
+			hdf5out.update({key:hdf5in[key].value})
+			
+		hdf5in.close()
+		return hdf5out
 
-def arcsinh_norm(x, norm=True, scale=1000):
-    '''
-    Perform an arcsinh-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
-    Useful for feeding into PCA or tSNE.
-        norm = convert to fractional counts first? divide each count by sqrt of sum of squares of counts for cell.
-        scale = factor to multiply values by before arcsinh-transform. scales values away from [0,1] in order to make arcsinh more effective.
-    '''
-    if not norm:
-        return np.arcsinh(x * scale)
-    
-    else:
-        return np.arcsinh(normalize(x, axis=0, norm='l2') * scale)
-    
-def log2_norm(x, norm = True):
-    '''
-    Perform a log2-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
-    Useful for feeding into PCA or tSNE.
-        norm = convert to fractional counts first? divide each count by sqrt of sum of squares of counts for cell.
-    '''
-    if not norm:
-        return np.log2(x + 1)
-    
-    else:
-        return np.log2(normalize(x, axis=0, norm='l2') + 1)
-    
+
 def compare_euclid(pre, post, plot_out=True):
     '''
     Test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
@@ -136,91 +107,9 @@ def compare_euclid(pre, post, plot_out=True):
         plt.show()
         
     return mantel_stats, EMD, KLD
-    
-def fcc_PCA(x, n_comp, plot_out=True):
-    '''perform PCA with n_components on matrix x of shape (n_cells, n_features)'''
-    # fit PCA to data
-    PCA_fit = PCA(n_components=n_comp).fit(x)
-    # transform data to fit
-    PCA_results = PCA_fit.transform(x)
-    # plot PCA if desired
-    if plot_out:
-        plt.figure(figsize=(10,5))
-        
-        plt.subplot(121)
-        sns.scatterplot(PCA_results[:,0], PCA_results[:,1], s=75, alpha=0.7)
-        plt.tick_params(labelbottom=False, labelleft=False)
-        plt.ylabel('PC2', fontsize=14)
-        plt.xlabel('PC1', fontsize=14)
-        plt.title('PCA', fontsize=16)
-        
-        plt.subplot(122)
-        plt.plot(np.cumsum(np.round(PCA_fit.explained_variance_ratio_, decimals=3)*100))
-        plt.tick_params(labelsize=12)
-        plt.ylabel('% Variance Explained', fontsize=14)
-        plt.xlabel('# of Features', fontsize=14)
-        plt.title('PCA Analysis', fontsize=16)
-        
-        sns.despine()
-        plt.tight_layout()
-        plt.show()
-        plt.close()
-        
-    return PCA_results
 
-def fcc_DCA(x, n_threads=2, dca_norm=True):
-    '''
-    Use deep count autoencoder (https://github.com/theislab/dca) to denoise and preprocess matrix x of shape (n_cells, n_features).
-    NOTE: DCA removes features with 0 counts for all cells prior to processing.
-    '''
-    adata = scanpy.AnnData(x) # generate AnnData object (https://github.com/theislab/scanpy) for passing to DCA
-    scanpy.pp.filter_genes(adata, min_counts=1) # remove features with 0 counts for all cells
-    dca(adata, threads=n_threads) # perform DCA analysis on AnnData object
-    
-    if dca_norm:
-        scanpy.pp.normalize_per_cell(adata) # normalize features for each cell with scanpy's method
-        scanpy.pp.log1p(adata) # log-transform data with scanpy's method
-        
-    return adata.X # return the denoised data as a np.ndarray
 
-def fcc_tSNE(x, p = 30, plot_out=True):
-    '''perform t-SNE with perplexity p on matrix x of shape (n_cells, n_features) to reduce to 2 features'''
-    tSNE_results = TSNE(n_components=2, perplexity=p).fit_transform(x)
-    # plot t-SNE if desired
-    if plot_out:
-        plt.figure(figsize=(5,5))
-        sns.scatterplot(tSNE_results[:,0], tSNE_results[:,1], s=75, alpha=0.7)
-        plt.xlabel('t-SNE 1', fontsize=14)
-        plt.ylabel('t-SNE 2', fontsize=14)
-        plt.tick_params(labelbottom=False, labelleft=False)
-        sns.despine(left=True, bottom=True)
-        plt.tight_layout()
-        plt.show()
-        plt.close()
-        
-    return tSNE_results
-
-def fcc_UMAP(x, p = 30, min_dist=0.3, plot_out=True):
-    '''
-    perform UMAP with perplexity p and minimum distance min_dist on matrix x of shape (n_cells, n_features) 
-    to reduce to 2 features
-    '''
-    UMAP_results = umap.UMAP(n_neighbors=p, min_dist=min_dist, metric='correlation').fit_transform(x)
-    # plot t-SNE if desired
-    if plot_out:
-        plt.figure(figsize=(5,5))
-        sns.scatterplot(UMAP_results[:,0], UMAP_results[:,1], s=75, alpha=0.7)
-        plt.xlabel('UMAP 1', fontsize=14)
-        plt.ylabel('UMAP 2', fontsize=14)
-        plt.tick_params(labelbottom=False, labelleft=False)
-        sns.despine(left=True, bottom=True)
-        plt.tight_layout()
-        plt.show()
-        plt.close()
-        
-    return UMAP_results
-
-# WORK IN PROGRESS
+# WORK IN PROGRESS #
 def gen_clusters(x, plot_out=True):
     '''
     Use pydpc to cluster matrix x of shape (n_cells, n_features). 
@@ -261,3 +150,4 @@ def gen_clusters(x, plot_out=True):
         ss = silhouette_score(x, clu.membership)
     
     return clu, ss
+
