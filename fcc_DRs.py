@@ -69,16 +69,21 @@ class counts_table(RNA_counts):
 	def __init__(self, datafile, labels=[0,0], cells_axis=0):
 		RNA_counts.__init__(self, datafile) # counts_table inherits from RNA_counts class
 
-		if self.filetype == '.zip':
+		if self.filetype == '.zip': # if compressed, open the file and update filetype
 			zf = zipfile.ZipFile(datafile)
 			datafile = zf.open(os.path.splitext(datafile)[0]) # update datafile with zipfile object
-			self.filetype = os.path.splitext(os.path.splitext(datafile)[0]) # update filetype
+			self.filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
 
-		elif self.filetype == '.csv':
+
+		if self.filetype == '.csv': # read comma-delimited tables
 			self.data = pd.read_csv(datafile, header=labels[0], index_col=labels[1])
 
-		if self.filetype == '.gz':
-			self.filetype = os.path.splitext(os.path.splitext(datafile)[0]) # update filetype
+		elif self.filetype == '.txt': # read tab-delimited text files
+				self.data = pd.read_table(datafile, header=labels[0], index_col=labels[1])
+
+
+		if self.filetype == '.gz': # if file is g-zipped, read accordingly
+			self.filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
 
 			if self.filetype == '.csv':
 				self.data = pd.read_csv(gzip.open(datafile), header=labels[0], index_col=labels[1])
@@ -86,38 +91,23 @@ class counts_table(RNA_counts):
 			elif self.filetype == '.txt':
 				self.data = pd.read_table(gzip.open(datafile), header=labels[0], index_col=labels[1])
 
-		if cells_axis == 1:
-			self.data = self.data.transpose() # put cells on 0 axis if not already there
 
-		if labels:
+		if cells_axis == 1: # put cells on 0 axis if not already there
+			self.data = self.data.transpose() 
+
+		if labels[0]!=None: # if cell IDs present, save as metadata
 			self.cell_IDs = self.data.index
+
+		if labels[1]!=None: # if gene IDs present, save as metadata
 			self.gene_IDs = self.data.columns
 
 
 
 class counts_hdf5(RNA_counts):
 	'''Object containing scRNA-seq counts data in .h5 or .hdf5 format'''
-	def __init__(self, datafile, labels=False, cells_axis=0):
+	def __init__(self, datafile):
 		RNA_counts.__init__(self, datafile) # counts_hdf5 inherits from RNA_counts class
-
-		if labels:
-			h = 0
-			i = 0
-
-		else:
-			h = None
-			i = None
-			cell_IDs = None
-			gene_IDs = None
-
 		self.data = read_hdf5(datafile) # extract data from file
-
-		if cells_axis == 1:
-			self.data = self.data.transpose() # put cells on 0 axis if not already there
-
-		if labels:
-			self.cell_IDs = self.data.index
-			self.gene_IDs = self.data.columns
 
 
 
