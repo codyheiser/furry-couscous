@@ -23,7 +23,7 @@ from pydpc import Cluster                    	# density-peak clustering
 import scanpy.api as scanpy
 from dca.api import dca                      	# DCA
 # UMAP
-import umap                                  	# UMAP
+from umap import UMAP                           # UMAP
 # plotting packages
 import matplotlib
 import matplotlib.pyplot as plt
@@ -118,7 +118,7 @@ class DR():
 
 
 	def plot_clusters(self):
-		'''Visualize density peak clustering of DR results'''
+		'''Visualize density peak clustering of DR results and calculate silhouette score'''
 		try:
 			fig, ax = plt.subplots(1, 3, figsize=(15, 5))
 			ax[0].scatter(self.results[:, 0], self.results[:, 1], s=75, alpha=0.7)
@@ -132,8 +132,10 @@ class DR():
 			sns.despine(left=True, bottom=True)
 			fig.tight_layout()
 
+			self.silhouette_score = silhouette_score(self.results, self.clu.membership) # calculate silhouette score
+
 		except AttributeError as err:
-			print('Clustering not yet determined.\nAssign clusters with self.clu.assign()\n', err)
+			print('Clustering not yet determined. Assign clusters with self.clu.assign().\n', err)
 
 
 
@@ -204,11 +206,11 @@ class fcc_UMAP(DR):
 	'''
 	def __init__(self, matrix, perplexity, min_dist=0.3, metric='correlation'):
 		DR.__init__(self, matrix) # inherits from DR object
-		self.perplexity = n_neighbors
+		self.perplexity = perplexity
 		self.min_dist = min_dist
 		self.metric = metric
 		self.results = UMAP(n_neighbors=self.perplexity, min_dist=self.min_dist, metric=self.metric).fit_transform(self.input)
-		self.clu = Cluster(self.results, autoplot=False)
+		self.clu = Cluster(self.results.astype('double'), autoplot=False)
 
 
 	def plot(self):
@@ -236,11 +238,11 @@ class fcc_DCA(DR):
 		scanpy.pp.filter_genes(self.adata, min_counts=1) # remove features with 0 counts for all cells
 		dca(self.adata, threads=n_threads) # perform DCA analysis on AnnData object
 		
-		if dca_norm:
+		if self.DCA_norm:
 			scanpy.pp.normalize_per_cell(self.adata) # normalize features for each cell with scanpy's method
 			scanpy.pp.log1p(self.adata) # log-transform data with scanpy's method
 			
 		self.results = self.adata.X # return the denoised data as a np.ndarray
-		self.clu = Cluster(self.results, autoplot=False)
+		self.clu = Cluster(self.results.astype('double'), autoplot=False)
 
 
