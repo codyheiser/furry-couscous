@@ -112,7 +112,7 @@ class counts_file(RNA_counts):
 
 
 		if self.filetype == '.gz': # if file is g-zipped, read accordingly
-			filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
+			self.filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
 
 			if self.filetype == '.csv':
 				data = pd.read_csv(gzip.open(datafile), header=labels[1], index_col=labels[0])
