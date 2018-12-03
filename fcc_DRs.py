@@ -31,66 +31,15 @@ import seaborn as sns; sns.set(style = 'white')
 
 
 class RNA_counts():
-	'''Object containing scRNA-seq counts data'''
-	def __init__(self, datafile, labels=False, cells_axis=0):
-		self.filetype = os.path.splitext(datafile)[1] # extract file extension to save as metadata
-
-
-	def arcsinh_norm(self, norm=True, scale=1000):
-		'''
-		Perform an arcsinh-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
-		Useful for feeding into PCA or tSNE.
-			norm = convert to fractional counts first? divide each count by sqrt of sum of squares of counts for cell.
-			scale = factor to multiply values by before arcsinh-transform. scales values away from [0,1] in order to make arcsinh more effective.
-		'''
-		if not norm:
-			return np.arcsinh(self.data * scale)
-		
-		else:
-			return np.arcsinh(normalize(self.data, axis=0, norm='l2') * scale)
-
-    
-	def log2_norm(self, norm = True):
-		'''
-		Perform a log2-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
-		Useful for feeding into PCA or tSNE.
-			norm = convert to fractional counts first? divide each count by sqrt of sum of squares of counts for cell.
-		'''
-		if not norm:
-			return np.log2(self.data + 1)
-		
-		else:
-			return np.log2(normalize(self.data, axis=0, norm='l2') + 1)
-
-
-
-class counts_table(RNA_counts):
-	'''Object containing scRNA-seq counts data in flat format .{csv,txt}{.gz,.zip}'''
-	def __init__(self, datafile, labels=[0,0], cells_axis=0):
-		RNA_counts.__init__(self, datafile) # counts_table inherits from RNA_counts class
-
-		if self.filetype == '.zip': # if compressed, open the file and update filetype
-			zf = zipfile.ZipFile(datafile)
-			datafile = zf.open(os.path.splitext(datafile)[0]) # update datafile with zipfile object
-			self.filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
-
-
-		if self.filetype == '.csv': # read comma-delimited tables
-			self.data = pd.read_csv(datafile, header=labels[0], index_col=labels[1])
-
-		elif self.filetype == '.txt': # read tab-delimited text files
-				self.data = pd.read_table(datafile, header=labels[0], index_col=labels[1])
-
-
-		if self.filetype == '.gz': # if file is g-zipped, read accordingly
-			self.filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
-
-			if self.filetype == '.csv':
-				self.data = pd.read_csv(gzip.open(datafile), header=labels[0], index_col=labels[1])
-
-			elif self.filetype == '.txt':
-				self.data = pd.read_table(gzip.open(datafile), header=labels[0], index_col=labels[1])
-
+	'''
+	Object containing scRNA-seq counts data
+		data = pd.DataFrame containing counts data.
+		labels = list of index_col and header values to pass to pd.read_csv(). None if no cell or gene IDs, respectively.
+		cells_axis = 0 if cells as rows, 1 if cells as columns.
+	'''
+	def __init__(self, data, labels=[0,0], cells_axis=0):
+		'''initialize object from np.ndarray or pd.DataFrame (data)'''
+		self.data = data # store pd.DataFrame as data attribute
 
 		if cells_axis == 1: # put cells on 0 axis if not already there
 			self.data = self.data.transpose() 
@@ -101,13 +50,77 @@ class counts_table(RNA_counts):
 		if labels[1]!=None: # if gene IDs present, save as metadata
 			self.gene_IDs = self.data.columns
 
+		self.counts = np.ascontiguousarray(self.data) # store counts matrix as counts attribute (no labels, np.array format)
 
 
-class counts_hdf5(RNA_counts):
-	'''Object containing scRNA-seq counts data in .h5 or .hdf5 format'''
-	def __init__(self, datafile):
-		RNA_counts.__init__(self, datafile) # counts_hdf5 inherits from RNA_counts class
-		self.data = read_hdf5(datafile) # extract data from file
+	def random_subset(self, n_cells):
+		'''take subset of n_cells from counts object'''
+		self.subset = np.random.choice(self.counts.shape[0], n_cells, replace=False)
+		self.counts = self.counts[self.subset, :]
+
+
+	def arcsinh_norm(self, norm=True, scale=1000):
+		'''
+		Perform an arcsinh-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
+		Useful for feeding into PCA or tSNE.
+			norm = convert to fractional counts first? divide each count by sqrt of sum of squares of counts for cell.
+			scale = factor to multiply values by before arcsinh-transform. scales values away from [0,1] in order to make arcsinh more effective.
+		'''
+		if not norm:
+			return np.arcsinh(self.counts * scale)
+		
+		else:
+			return np.arcsinh(normalize(self.counts, axis=0, norm='l2') * scale)
+
+    
+	def log2_norm(self, norm = True):
+		'''
+		Perform a log2-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
+		Useful for feeding into PCA or tSNE.
+			norm = convert to fractional counts first? divide each count by sqrt of sum of squares of counts for cell.
+		'''
+		if not norm:
+			return np.log2(self.counts + 1)
+		
+		else:
+			return np.log2(normalize(self.counts, axis=0, norm='l2') + 1)
+
+
+
+class counts_file(RNA_counts):
+	'''
+	Object containing scRNA-seq counts data in flat format .{csv,txt}{.gz,.zip}
+		datafile = path to file to read
+		labels = list of index_col and header values to pass to pd.read_csv(). None if no cell or gene IDs, respectively.
+		cells_axis = 0 if cells as rows, 1 if cells as columns.
+	'''
+	def __init__(self, datafile, labels=[0,0], cells_axis=0):
+		'''initialize object from outside file (datafile)'''
+		self.filetype = os.path.splitext(datafile)[1] # extract file extension to save as metadata
+
+		if self.filetype == '.zip': # if compressed, open the file and update filetype
+			zf = zipfile.ZipFile(datafile)
+			datafile = zf.open(os.path.splitext(datafile)[0]) # update datafile with zipfile object
+			self.filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
+
+
+		if self.filetype == '.csv': # read comma-delimited tables
+			data = pd.read_csv(datafile, header=labels[1], index_col=labels[0])
+
+		elif self.filetype == '.txt': # read tab-delimited text files
+				data = pd.read_table(datafile, header=labels[1], index_col=labels[0])
+
+
+		if self.filetype == '.gz': # if file is g-zipped, read accordingly
+			filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
+
+			if self.filetype == '.csv':
+				data = pd.read_csv(gzip.open(datafile), header=labels[1], index_col=labels[0])
+
+			elif self.filetype == '.txt':
+				data = pd.read_table(gzip.open(datafile), header=labels[1], index_col=labels[0])
+
+		RNA_counts.__init__(self, data, labels=labels, cells_axis=cells_axis) # counts_file inherits from RNA_counts class
 
 
 
@@ -115,6 +128,11 @@ class DR():
 	'''Catch-all class for dimensionality reduction outputs for high-dimensional data of shape (n_cells, n_features)'''
 	def __init__(self, matrix):
 		self.input = matrix # store input matrix as metadata
+
+
+	def distance_matrix(self):
+		'''calculate Euclidean distances between cells in matrix of shape (n_cells, n_cells)'''
+		return sc.spatial.distance_matrix(self.results, self.results)
 
 
 	def plot_clusters(self):

@@ -13,5 +13,4 @@ Defines classes for manipulation, processing, and visualization of scRNA-seq cou
   
 __TODO:__
 * add NVR feature selection capability to RNA_counts objects
-* distance matrix attribute to RNA_counts objects
-* finish .hdf5 data object
+* add automatic, reproducible Kfold split of RNA_counts objects
