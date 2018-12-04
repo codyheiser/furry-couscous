@@ -34,29 +34,24 @@ def read_hdf5(filename):
 def compare_euclid(pre, post, plot_out=True):
 	'''
 	Test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
-	1) calculates Euclidean distance matrix (n_cells, n_cells)
-	2) performs Mantel test for correlation of distance matrices (skbio.stats.distance.mantel())
-	3) normalizes unique distances (upper triangle of distance matrix) to maximum for each dataset, yielding fractions in range [0, 1]
-	4) calculates Earth-Mover's Distance and Kullback-Leibler Divergence for euclidean distance fractions between datasets
-	5) plots fractional Euclidean distances for both datasets, cumulative probability distribution for fractional distances, and correlation of distances in one figure
+	1) performs Mantel test for correlation of distance matrices (skbio.stats.distance.mantel())
+	2) normalizes unique distances (upper triangle of distance matrix) to maximum for each dataset, yielding fractions in range [0, 1]
+	3) calculates Earth-Mover's Distance and Kullback-Leibler Divergence for euclidean distance fractions between datasets
+	4) plots fractional Euclidean distances for both datasets, cumulative probability distribution for fractional distances, and correlation of distances in one figure
 	
-		pre = matrix of shape (n_cells, n_features) before transformation/projection
-		post = matrix of shape (n_cells, n_features) after transformation/projection
+		pre = distance matrix of shape (n_cells, n_cells) before transformation/projection
+		post = distance matrix of shape (n_cells, n_cells) after transformation/projection
 		plot_out = print plots as well as return stats?
 	'''
 	# make sure the number of cells in each matrix is the same
-	assert pre.shape[0] == post.shape[0] , 'Matrices contain different number of cells.\n{} in "pre"\n{} in "post"\n'.format(pre.shape[0], post.shape[0])
-	
-	# generate distance matrices for pre- and post-transformation arrays
-	dm_pre = sc.spatial.distance_matrix(pre,pre)
-	dm_post = sc.spatial.distance_matrix(post,post)
+	assert pre.shape == post.shape , 'Matrices contain different number of cells.\n{} in "pre"\n{} in "post"\n'.format(pre.shape[0], post.shape[0])
 	
 	# calculate Spearman correlation coefficient and p-value for distance matrices using Mantel test
-	mantel_stats = mantel(x=dm_pre, y=dm_post)
+	mantel_stats = mantel(x=pre, y=post)
 	
 	# for each matrix, take the upper triangle (it's symmetrical) for calculating EMD and plotting distance differences
-	pre_flat = dm_pre[np.triu_indices(dm_pre.shape[1],1)]
-	post_flat = dm_post[np.triu_indices(dm_post.shape[1],1)]
+	pre_flat = pre[np.triu_indices(pre.shape[1],1)]
+	post_flat = post[np.triu_indices(post.shape[1],1)]
 	
 	# normalize flattened distances within each set for fair comparison of probability distributions
 	pre_flat_norm = (pre_flat/pre_flat.max())
