@@ -17,6 +17,7 @@ import scipy as sc
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA        	# PCA
 from sklearn.manifold import TSNE            	# t-SNE
+from sklearn.model_selection import KFold		# K-fold cross-validation
 # density peak clustering
 from pydpc import Cluster                    	# density-peak clustering
 # DCA packages
@@ -53,10 +54,9 @@ class RNA_counts():
 		self.counts = np.ascontiguousarray(self.data) # store counts matrix as counts attribute (no labels, np.array format)
 
 
-	def random_subset(self, n_cells):
-		'''take subset of n_cells from counts object'''
-		self.subset = np.random.choice(self.counts.shape[0], n_cells, replace=False)
-		self.counts = self.counts[self.subset, :]
+	def distance_matrix(self):
+		'''calculate Euclidean distances between cells in matrix of shape (n_cells, n_cells)'''
+		return sc.spatial.distance_matrix(self.counts, self.counts)
 
 
 	def arcsinh_norm(self, norm=True, scale=1000):
@@ -84,6 +84,22 @@ class RNA_counts():
 		
 		else:
 			return np.log2(normalize(self.counts, axis=0, norm='l2') + 1)
+
+
+	def random_subset(self, n_cells):
+		'''take subset of n_cells from counts object'''
+		self.subset_indices = np.random.choice(self.counts.shape[0], n_cells, replace=False)
+		self.subset = self.data.loc[self.subset_indices]
+
+
+	def kfold_split(self, n_splits, shuffle=True, seed=None):
+		'''split cells using k-fold strategy to reduce data size and cross-validate'''
+		kf = KFold(n_splits=n_splits, shuffle=shuffle, random_state=seed) # generate KFold object for splitting data
+		self.splits = {'train':[], 'test':[]} # initiate empty dictionary to dump matrix subsets into
+
+		for train_i, test_i in kf.split(self.data):
+			self.splits['train'].append(self.data.loc[train_i])
+			self.splits['test'].append(self.data.loc[test_i])
 
 
 
