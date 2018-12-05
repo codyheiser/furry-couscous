@@ -25,6 +25,8 @@ import scanpy.api as scanpy
 from dca.api import dca                      	# DCA
 # UMAP
 from umap import UMAP                           # UMAP
+# NVR
+import nvr 										# NVR
 # plotting packages
 import matplotlib
 import matplotlib.pyplot as plt
@@ -86,57 +88,63 @@ class RNA_counts():
 			return np.log2(normalize(self.counts, axis=0, norm='l2') + 1)
 
 
-	def random_subset(self, n_cells):
-		'''take subset of n_cells from counts object'''
-		self.subset_indices = np.random.choice(self.counts.shape[0], n_cells, replace=False)
-		self.subset = self.data.loc[self.subset_indices]
-
-
-	def kfold_split(self, n_splits, shuffle=True, seed=None):
-		'''split cells using k-fold strategy to reduce data size and cross-validate'''
-		kf = KFold(n_splits=n_splits, shuffle=shuffle, random_state=seed) # generate KFold object for splitting data
-		self.splits = {'train':[], 'test':[]} # initiate empty dictionary to dump matrix subsets into
-
-		for train_i, test_i in kf.split(self.data):
-			self.splits['train'].append(self.data.loc[train_i])
-			self.splits['test'].append(self.data.loc[test_i])
-
-
-
-class counts_file(RNA_counts):
-	'''
-	Object containing scRNA-seq counts data in flat format .{csv,txt}{.gz,.zip}
-		datafile = path to file to read
-		labels = list of index_col and header values to pass to pd.read_csv(). None if no cell or gene IDs, respectively.
-		cells_axis = 0 if cells as rows, 1 if cells as columns.
-	'''
-	def __init__(self, datafile, labels=[0,0], cells_axis=0):
+	@classmethod
+	def from_file(cls, datafile, labels=[0,0], cells_axis=0):
 		'''initialize object from outside file (datafile)'''
-		self.filetype = os.path.splitext(datafile)[1] # extract file extension to save as metadata
+		filetype = os.path.splitext(datafile)[1] # extract file extension to save as metadata
 
-		if self.filetype == '.zip': # if compressed, open the file and update filetype
+		if filetype == '.zip': # if compressed, open the file and update filetype
 			zf = zipfile.ZipFile(datafile)
 			datafile = zf.open(os.path.splitext(datafile)[0]) # update datafile with zipfile object
-			self.filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
+			filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
 
 
-		if self.filetype == '.csv': # read comma-delimited tables
+		if filetype == '.csv': # read comma-delimited tables
 			data = pd.read_csv(datafile, header=labels[1], index_col=labels[0])
 
-		elif self.filetype == '.txt': # read tab-delimited text files
+		elif filetype == '.txt': # read tab-delimited text files
 				data = pd.read_table(datafile, header=labels[1], index_col=labels[0])
 
 
-		if self.filetype == '.gz': # if file is g-zipped, read accordingly
-			self.filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
+		if filetype == '.gz': # if file is g-zipped, read accordingly
+			filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
 
-			if self.filetype == '.csv':
+			if filetype == '.csv':
 				data = pd.read_csv(gzip.open(datafile), header=labels[1], index_col=labels[0])
 
-			elif self.filetype == '.txt':
+			elif filetype == '.txt':
 				data = pd.read_table(gzip.open(datafile), header=labels[1], index_col=labels[0])
 
-		RNA_counts.__init__(self, data, labels=labels, cells_axis=cells_axis) # counts_file inherits from RNA_counts class
+		return cls(data, labels=labels, cells_axis=cells_axis)
+
+
+	@classmethod
+	def downsample(cls, data, n_cells):
+		'''downsample a dataframe of shape (n_cells, n_features) to n_cells and generate new counts object'''
+		return cls(data.loc[np.random.choice(data.shape[0], n_cells, replace=False)])
+
+
+	@classmethod
+	def kfold_split(cls, data, n_splits, seed=None, shuffle=True):
+		'''split cells using k-fold strategy to reduce data size and cross-validate'''
+		kf = KFold(n_splits=n_splits, shuffle=shuffle, random_state=seed) # generate KFold object for splitting data
+		splits = {'train':[], 'test':[]} # initiate empty dictionary to dump matrix subsets into
+
+		for train_i, test_i in kf.split(data):
+			splits['train'].append(cls(data.loc[train_i]))
+			splits['test'].append(cls(data.loc[test_i]))
+
+		return splits
+
+
+	@classmethod
+	def nvr_select(cls, data, scale=1000):
+		hqGenes = nvr.parseNoise(data)
+		dHq = nvr.mkIndexedArr(data, hqGenes)
+		dataHq = nvr.pwArcsinh(dHq, scale)
+		selected_genes=nvr.select_genes(dataHq)
+		print('\nSelected {} variable genes\n'.format(selected_genes.shape[0]))
+		return cls(dataHq[:,selected_genes], labels=[None,None])
 
 
 
