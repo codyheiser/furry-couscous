@@ -43,14 +43,16 @@ class RNA_counts():
 	def __init__(self, data, labels=[0,0], cells_axis=0):
 		'''initialize object from np.ndarray or pd.DataFrame (data)'''
 		self.data = data # store pd.DataFrame as data attribute
+		self.cell_labels = labels[0] # column containing cell IDs
+		self.gene_labels = labels[1] # row containing gene IDs
 
 		if cells_axis == 1: # put cells on 0 axis if not already there
 			self.data = self.data.transpose() 
 
-		if labels[0]!=None: # if cell IDs present, save as metadata
+		if self.cell_labels!=None: # if cell IDs present, save as metadata
 			self.cell_IDs = self.data.index
 
-		if labels[1]!=None: # if gene IDs present, save as metadata
+		if self.gene_labels!=None: # if gene IDs present, save as metadata
 			self.gene_IDs = self.data.columns
 
 		self.counts = np.ascontiguousarray(self.data) # store counts matrix as counts attribute (no labels, np.array format)
@@ -131,20 +133,18 @@ class RNA_counts():
 		splits = {'train':[], 'test':[]} # initiate empty dictionary to dump matrix subsets into
 
 		for train_i, test_i in kf.split(data):
-			splits['train'].append(cls(data.loc[train_i]))
-			splits['test'].append(cls(data.loc[test_i]))
+			splits['train'].append(cls(data.iloc[train_i]))
+			splits['test'].append(cls(data.iloc[test_i]))
 
 		return splits
 
 
 	@classmethod
-	def nvr_select(cls, data, scale=1000):
-		hqGenes = nvr.parseNoise(data)
-		dHq = nvr.mkIndexedArr(data, hqGenes)
-		dataHq = nvr.pwArcsinh(dHq, scale)
-		selected_genes=nvr.select_genes(dataHq)
+	def nvr_select(cls, counts_obj, scale=1000):
+		hqGenes = nvr.parseNoise(counts_obj.counts) # identify non-noisy genes
+		selected_genes = nvr.select_genes(counts_obj.arcsinh_norm(scale=scale)[:,hqGenes]) # select features from arsinh-transformed, non-noisy data
 		print('\nSelected {} variable genes\n'.format(selected_genes.shape[0]))
-		return cls(dataHq[:,selected_genes], labels=[None,None])
+		return cls(counts_obj.data.iloc[:,selected_genes], labels=[counts_obj.cell_labels, counts_obj.gene_labels])
 
 
 
@@ -161,7 +161,7 @@ class DR():
 
 	def plot_clusters(self):
 		'''Visualize density peak clustering of DR results and calculate silhouette score'''
-		try:
+		if hasattr(self.clu, 'clusters'):
 			fig, ax = plt.subplots(1, 3, figsize=(15, 5))
 			ax[0].scatter(self.results[:, 0], self.results[:, 1], s=75, alpha=0.7)
 			ax[0].scatter(self.results[self.clu.clusters, 0], self.results[self.clu.clusters, 1], s=90, c="red")
@@ -176,8 +176,9 @@ class DR():
 
 			self.silhouette_score = silhouette_score(self.results, self.clu.membership) # calculate silhouette score
 
-		except AttributeError as err:
-			print('Clustering not yet determined. Assign clusters with self.clu.assign().\n', err)
+		else:
+			print('Clustering not yet determined. Assign clusters with self.clu.assign().\n')
+			return
 
 
 
