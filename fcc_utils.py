@@ -91,8 +91,8 @@ def compare_euclid(pre, post, plot_out=True):
 		plt.subplot(133)
 		# plot correlation of distances
 		sns.scatterplot(pre_flat_norm, post_flat_norm, s=75, alpha=0.5)
-		plt.figtext(0.99, 0.18, 'R: {}\np-val: {}\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[1], mantel_stats[2]), fontsize=14)
-		plt.figtext(0.61, 0.18, 'EMD: {}\n\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)
+		plt.figtext(0.99, 0.3, 'R: {}\np-val: {}\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[1], mantel_stats[2]), fontsize=14)
+		plt.figtext(0.61, 0.3, 'EMD: {}\n\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)
 		plt.title('Normalized Distance Correlation', fontsize=16)
 		plt.xlabel('Pre-Transformation', fontsize=14)
 		plt.ylabel('Post-Transformation', fontsize=14)

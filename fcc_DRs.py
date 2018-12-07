@@ -121,20 +121,41 @@ class RNA_counts():
 
 
 	@classmethod
-	def downsample(cls, data, n_cells):
-		'''downsample a dataframe of shape (n_cells, n_features) to n_cells and generate new counts object'''
-		return cls(data.loc[np.random.choice(data.shape[0], n_cells, replace=False)])
+	def downsample_rand(cls, counts_obj, n_cells, seed=None):
+		'''randomly downsample a dataframe of shape (n_cells, n_features) to n_cells and generate new counts object'''
+		np.random.seed(seed) # set seed for reproducible sampling if desired
+		return cls(counts_obj.data.iloc[np.random.choice(data.shape[0], n_cells, replace=False)], labels=[counts_obj.cell_labels, counts_obj.gene_labels])
 
 
 	@classmethod
-	def kfold_split(cls, data, n_splits, seed=None, shuffle=True):
+	def downsample_proportional(cls, counts_obj, clu_membership, n_cells, seed=None):
+		'''
+		downsample a dataframe of shape (n_cells, n_features) to total n_cells using cluster membership.
+		finds proportion of cells in each cluster (DR.clu.membership attribute) and maintains each percentage.
+			counts_obj = RNA_counts object with data to downsample
+			clu_membership = DR.clu.membership np.array generated from assocated RNA_counts data object
+			n_cells = total number of cells desired in downsampled RNA_counts object
+		'''
+		np.random.seed(seed) # set seed for reproducible sampling if desired
+		IDs, clu_counts = np.unique(clu_membership, return_counts=True) # get cluster IDs and number of cells in each
+
+		cells_out = np.array([]) # initialize array of output cell indices
+		for ID, count in zip(IDs, clu_counts):
+			clu_num = int(count/clu_counts.sum()*n_cells) + 1 # number of cells to sample for given cluster
+			cells_out = np.append(cells_out, np.random.choice(np.where(clu_membership == ID)[0], clu_num, replace=False))
+
+		return cls(counts_obj.data.iloc[cells_out], labels=[counts_obj.cell_labels, counts_obj.gene_labels])
+
+
+	@classmethod
+	def kfold_split(cls, counts_obj, n_splits, seed=None, shuffle=True):
 		'''split cells using k-fold strategy to reduce data size and cross-validate'''
 		kf = KFold(n_splits=n_splits, shuffle=shuffle, random_state=seed) # generate KFold object for splitting data
 		splits = {'train':[], 'test':[]} # initiate empty dictionary to dump matrix subsets into
 
-		for train_i, test_i in kf.split(data):
-			splits['train'].append(cls(data.iloc[train_i]))
-			splits['test'].append(cls(data.iloc[test_i]))
+		for train_i, test_i in kf.split(counts_obj.data):
+			splits['train'].append(cls(counts_obj.data.iloc[train_i], labels=[counts_obj.cell_labels, counts_obj.gene_labels]))
+			splits['test'].append(cls(counts_obj.data.iloc[test_i], labels=[counts_obj.cell_labels, counts_obj.gene_labels]))
 
 		return splits
 
@@ -147,6 +168,13 @@ class RNA_counts():
 		return cls(counts_obj.data.iloc[:,selected_genes], labels=[counts_obj.cell_labels, counts_obj.gene_labels])
 
 
+	@classmethod
+	def var_select(cls, counts_obj, n_features):
+		'''select n_features (genes) with highest variance across all cells in dataset'''
+		v = counts_obj.data.var(axis=0).nlargest(n_features).index # get top n variant gene IDs
+		return cls(counts_obj.data[v], labels=[counts_obj.cell_labels, counts_obj.gene_labels])
+
+
 
 class DR():
 	'''Catch-all class for dimensionality reduction outputs for high-dimensional data of shape (n_cells, n_features)'''
@@ -157,6 +185,14 @@ class DR():
 	def distance_matrix(self):
 		'''calculate Euclidean distances between cells in matrix of shape (n_cells, n_cells)'''
 		return sc.spatial.distance_matrix(self.results, self.results)
+
+
+	def cluster_counts(self):
+		'''return number of cells in each cluster'''
+		if hasattr(self.clu, 'membership'):
+			IDs, counts = np.unique(self.clu.membership, return_counts=True)
+			for ID, count in zip(IDs, clu_counts):
+				print('{} cells in cluster {} ({} %)\n'.format(count, ID, np.round(count/counts.sum()*100,3)))
 
 
 	def plot_clusters(self):
