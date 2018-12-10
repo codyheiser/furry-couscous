@@ -42,7 +42,7 @@ class RNA_counts():
 	'''
 	def __init__(self, data, labels=[0,0], cells_axis=0):
 		'''initialize object from np.ndarray or pd.DataFrame (data)'''
-		self.data = data # store pd.DataFrame as data attribute
+		self.data = pd.DataFrame(data) # store pd.DataFrame as data attribute
 		self.cell_labels = labels[0] # column containing cell IDs
 		self.gene_labels = labels[1] # row containing gene IDs
 
