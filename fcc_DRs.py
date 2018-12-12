@@ -47,7 +47,7 @@ class RNA_counts():
 		self.gene_labels = labels[1] # row containing gene IDs
 
 		if cells_axis == 1: # put cells on 0 axis if not already there
-			self.data = self.data.transpose() 
+			self.data = self.data.transpose()
 
 		if self.cell_labels!=None: # if cell IDs present, save as metadata
 			self.cell_IDs = self.data.index
@@ -72,11 +72,11 @@ class RNA_counts():
 		'''
 		if not norm:
 			return np.arcsinh(self.counts * scale)
-		
+
 		else:
 			return np.arcsinh(normalize(self.counts, axis=0, norm='l2') * scale)
 
-    
+
 	def log2_norm(self, norm = True):
 		'''
 		Perform a log2-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
@@ -85,7 +85,7 @@ class RNA_counts():
 		'''
 		if not norm:
 			return np.log2(self.counts + 1)
-		
+
 		else:
 			return np.log2(normalize(self.counts, axis=0, norm='l2') + 1)
 
@@ -124,7 +124,7 @@ class RNA_counts():
 	def downsample_rand(cls, counts_obj, n_cells, seed=None):
 		'''randomly downsample a dataframe of shape (n_cells, n_features) to n_cells and generate new counts object'''
 		np.random.seed(seed) # set seed for reproducible sampling if desired
-		return cls(counts_obj.data.iloc[np.random.choice(data.shape[0], n_cells, replace=False)], labels=[counts_obj.cell_labels, counts_obj.gene_labels])
+		return cls(counts_obj.data.iloc[np.random.choice(counts_obj.data.shape[0], n_cells, replace=False)], labels=[counts_obj.cell_labels, counts_obj.gene_labels])
 
 
 	@classmethod
@@ -162,8 +162,13 @@ class RNA_counts():
 
 	@classmethod
 	def nvr_select(cls, counts_obj, scale=1000):
-		hqGenes = nvr.parseNoise(counts_obj.counts) # identify non-noisy genes
-		selected_genes = nvr.select_genes(counts_obj.arcsinh_norm(scale=scale)[:,hqGenes]) # select features from arsinh-transformed, non-noisy data
+		if scale:
+			hqGenes = nvr.parseNoise(counts_obj.counts) # identify non-noisy genes
+			selected_genes = nvr.select_genes(counts_obj.arcsinh_norm(scale=scale)[:,hqGenes]) # select features from arsinh-transformed, non-noisy data
+
+		else:
+			selected_genes = nvr.select_genes(counts_obj.arcsinh_norm(scale=scale)) # select features from arsinh-transformed, non-noisy data
+			
 		print('\nSelected {} variable genes\n'.format(selected_genes.shape[0]))
 		return cls(counts_obj.data.iloc[:,selected_genes], labels=[counts_obj.cell_labels, counts_obj.gene_labels])
 
@@ -206,7 +211,7 @@ class DR():
 			for _ax in ax:
 				_ax.set_aspect('equal')
 				_ax.tick_params(labelbottom=False, labelleft=False)
-			
+
 			sns.despine(left=True, bottom=True)
 			fig.tight_layout()
 
@@ -232,21 +237,21 @@ class fcc_PCA(DR):
 
 	def plot(self):
 		plt.figure(figsize=(10,5))
-		
+
 		plt.subplot(121)
 		plt.scatter(self.results[:,0], self.results[:,1], s=75, alpha=0.7, c=self.clu.density)
 		plt.tick_params(labelbottom=False, labelleft=False)
 		plt.ylabel('PC2', fontsize=14)
 		plt.xlabel('PC1', fontsize=14)
 		plt.title('PCA', fontsize=16)
-		
+
 		plt.subplot(122)
 		plt.plot(np.cumsum(np.round(self.fit.explained_variance_ratio_, decimals=3)*100))
 		plt.tick_params(labelsize=12)
 		plt.ylabel('% Variance Explained', fontsize=14)
 		plt.xlabel('# of Features', fontsize=14)
 		plt.title('PCA Analysis', fontsize=16)
-		
+
 		sns.despine()
 		plt.tight_layout()
 		plt.show()
@@ -316,12 +321,10 @@ class fcc_DCA(DR):
 		self.adata = scanpy.AnnData(self.input) # generate AnnData object (https://github.com/theislab/scanpy) for passing to DCA
 		scanpy.pp.filter_genes(self.adata, min_counts=1) # remove features with 0 counts for all cells
 		dca(self.adata, threads=n_threads) # perform DCA analysis on AnnData object
-		
+
 		if self.DCA_norm:
 			scanpy.pp.normalize_per_cell(self.adata) # normalize features for each cell with scanpy's method
 			scanpy.pp.log1p(self.adata) # log-transform data with scanpy's method
-			
+
 		self.results = self.adata.X # return the denoised data as a np.ndarray
 		self.clu = Cluster(self.results.astype('double'), autoplot=False)
-
-
