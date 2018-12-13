@@ -18,6 +18,7 @@ from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA        	# PCA
 from sklearn.manifold import TSNE            	# t-SNE
 from sklearn.model_selection import KFold		# K-fold cross-validation
+from sklearn.neighbors import kneighbors_graph	# K-nearest neighbors graph
 # density peak clustering
 from pydpc import Cluster                    	# density-peak clustering
 # DCA packages
@@ -61,6 +62,11 @@ class RNA_counts():
 	def distance_matrix(self):
 		'''calculate Euclidean distances between cells in matrix of shape (n_cells, n_cells)'''
 		return sc.spatial.distance_matrix(self.counts, self.counts)
+
+
+	def knn_graph(self, k):
+		'''calculate k nearest neighbors for each cell in distance matrix of shape (n_cells, n_cells)'''
+		return kneighbors_graph(self.distance_matrix(), k, mode='connectivity', include_self=False).toarray()
 
 
 	def arcsinh_norm(self, norm=True, scale=1000):
@@ -168,7 +174,7 @@ class RNA_counts():
 
 		else:
 			selected_genes = nvr.select_genes(counts_obj.arcsinh_norm(scale=scale)) # select features from arsinh-transformed, non-noisy data
-			
+
 		print('\nSelected {} variable genes\n'.format(selected_genes.shape[0]))
 		return cls(counts_obj.data.iloc[:,selected_genes], labels=[counts_obj.cell_labels, counts_obj.gene_labels])
 
@@ -190,6 +196,11 @@ class DR():
 	def distance_matrix(self):
 		'''calculate Euclidean distances between cells in matrix of shape (n_cells, n_cells)'''
 		return sc.spatial.distance_matrix(self.results, self.results)
+
+
+	def knn_graph(self, k):
+		'''calculate k nearest neighbors for each cell in distance matrix of shape (n_cells, n_cells)'''
+		return kneighbors_graph(self.distance_matrix(), k, mode='connectivity', include_self=False).toarray()
 
 
 	def cluster_counts(self):
