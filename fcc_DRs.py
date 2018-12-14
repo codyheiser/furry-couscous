@@ -1,7 +1,7 @@
 # furry-couscous dimensionality reduction objects
 
 # @author: C Heiser
-# November 2018
+# December 2018
 
 # utility functions
 from fcc_utils import *
@@ -59,14 +59,31 @@ class RNA_counts():
 		self.counts = np.ascontiguousarray(self.data) # store counts matrix as counts attribute (no labels, np.array format)
 
 
-	def distance_matrix(self):
-		'''calculate Euclidean distances between cells in matrix of shape (n_cells, n_cells)'''
-		return sc.spatial.distance_matrix(self.counts, self.counts)
+	def distance_matrix(self, transform=None, **kwargs):
+		'''
+		calculate Euclidean distances between cells in matrix of shape (n_cells, n_cells)
+			norm = how to normalize data prior to calculating distances (None, "arcsinh", "log2")
+			**kwargs = keyword arguments to pass to normalization functions
+		'''
+		if transform is None:
+			return sc.spatial.distance_matrix(self.counts, self.counts)
+
+		elif transform == 'arcsinh':
+			transformed = self.arcsinh_norm(**kwargs)
+			return sc.spatial.distance_matrix(transformed, transformed)
+
+		elif transform == 'log2':
+			transformed = self.log2_norm(**kwargs)
+			return sc.spatial.distance_matrix(transformed, transformed)
 
 
-	def knn_graph(self, k):
-		'''calculate k nearest neighbors for each cell in distance matrix of shape (n_cells, n_cells)'''
-		return kneighbors_graph(self.distance_matrix(), k, mode='connectivity', include_self=False).toarray()
+	def knn_graph(self, k, **kwargs):
+		'''
+		calculate k nearest neighbors for each cell in distance matrix of shape (n_cells, n_cells)
+			k = number of nearest neighbors to test
+			**kwargs = keyword arguments to pass to distance_matrix() function
+		'''
+		return kneighbors_graph(self.distance_matrix(**kwargs), k, mode='connectivity', include_self=False).toarray()
 
 
 	def arcsinh_norm(self, norm=True, scale=1000):
@@ -83,7 +100,7 @@ class RNA_counts():
 			return np.arcsinh(normalize(self.counts, axis=0, norm='l2') * scale)
 
 
-	def log2_norm(self, norm = True):
+	def log2_norm(self, norm=True):
 		'''
 		Perform a log2-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
 		Useful for feeding into PCA or tSNE.
@@ -124,6 +141,12 @@ class RNA_counts():
 				data = pd.read_table(gzip.open(datafile), header=labels[1], index_col=labels[0])
 
 		return cls(data, labels=labels, cells_axis=cells_axis)
+
+
+	@classmethod
+	def drop_set(cls, counts_obj, drop_index, axis):
+		'''drop cells (axis 0) or genes (axis 1) with a pd.Index list. return RNA_counts object with reduced data.'''
+		return cls(counts_obj.data.drop(drop_index, axis=axis), labels=[counts_obj.cell_labels, counts_obj.gene_labels])
 
 
 	@classmethod
@@ -207,7 +230,7 @@ class DR():
 		'''return number of cells in each cluster'''
 		if hasattr(self.clu, 'membership'):
 			IDs, counts = np.unique(self.clu.membership, return_counts=True)
-			for ID, count in zip(IDs, clu_counts):
+			for ID, count in zip(IDs, counts):
 				print('{} cells in cluster {} ({} %)\n'.format(count, ID, np.round(count/counts.sum()*100,3)))
 
 
