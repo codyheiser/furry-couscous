@@ -26,6 +26,9 @@ import scanpy.api as scanpy
 from dca.api import dca                      	# DCA
 # UMAP
 from umap import UMAP                           # UMAP
+# FIt-SNE
+import sys; sys.path.append('/Users/Cody/git/FIt-SNE')
+from fast_tsne import fast_tsne					# FIt-SNE
 # NVR
 import nvr 										# NVR
 # plotting packages
@@ -226,34 +229,40 @@ class DR():
 		return kneighbors_graph(self.distance_matrix(), k, mode='connectivity', include_self=False).toarray()
 
 
-	def cluster_counts(self):
+	def silhouette_score(self):
+		'''calculate silhouette score of clustered results'''
+		assert hasattr(self.clu, 'membership'), 'Clustering not yet determined. Assign clusters with self.clu.assign().\n'
+		return silhouette_score(self.results, self.clu.membership) # calculate silhouette score
+
+
+	def cluster_counts(self, prettyprint=True):
 		'''return number of cells in each cluster'''
-		if hasattr(self.clu, 'membership'):
-			IDs, counts = np.unique(self.clu.membership, return_counts=True)
-			for ID, count in zip(IDs, counts):
-				print('{} cells in cluster {} ({} %)\n'.format(count, ID, np.round(count/counts.sum()*100,3)))
+		assert hasattr(self.clu, 'membership'), 'Clustering not yet determined. Assign clusters with self.clu.assign().\n'
+		IDs, counts = np.unique(self.clu.membership, return_counts=True)
+		for ID, count in zip(IDs, counts):
+			print('{} cells in cluster {} ({} %)\n'.format(count, ID, np.round(count/counts.sum()*100,3)))
 
 
 	def plot_clusters(self):
 		'''Visualize density peak clustering of DR results and calculate silhouette score'''
-		if hasattr(self.clu, 'clusters'):
-			fig, ax = plt.subplots(1, 3, figsize=(15, 5))
-			ax[0].scatter(self.results[:, 0], self.results[:, 1], s=75, alpha=0.7)
-			ax[0].scatter(self.results[self.clu.clusters, 0], self.results[self.clu.clusters, 1], s=90, c="red")
-			ax[1].scatter(self.results[:, 0], self.results[:, 1], s=75, alpha=0.7, c=self.clu.density)
-			ax[2].scatter(self.results[:, 0], self.results[:, 1], s=75, alpha=0.7, c=self.clu.membership, cmap=plt.cm.plasma)
-			for _ax in ax:
-				_ax.set_aspect('equal')
-				_ax.tick_params(labelbottom=False, labelleft=False)
+		assert hasattr(self.clu, 'clusters'), 'Clustering not yet determined. Assign clusters with self.clu.assign().\n'
+		fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+		ax[0].scatter(self.results[:, 0], self.results[:, 1], s=75, alpha=0.7)
+		ax[0].scatter(self.results[self.clu.clusters, 0], self.results[self.clu.clusters, 1], s=90, c="red")
+		ax[1].scatter(self.results[:, 0], self.results[:, 1], s=75, alpha=0.7, c=self.clu.density)
+		ax[2].scatter(self.results[:, 0], self.results[:, 1], s=75, alpha=0.7, c=self.clu.membership, cmap=plt.cm.plasma)
+		IDs, counts = np.unique(self.clu.membership, return_counts=True) # get cluster counts and IDs
+		bbox_props = dict(boxstyle="round", fc="w", ec="0.5", alpha=0.9) # set up annotate box
+		# add percentages of each cluster to plot
+		for ID, count, x, y in zip(IDs, counts, self.results[self.clu.clusters, 0], self.results[self.clu.clusters, 1]):
+			ax[2].annotate('{} %'.format(np.round(count/counts.sum()*100,2)), xy=(x, y), ha="center", va="center", size=12, bbox=bbox_props)
 
-			sns.despine(left=True, bottom=True)
-			fig.tight_layout()
+		for _ax in ax:
+			_ax.set_aspect('equal')
+			_ax.tick_params(labelbottom=False, labelleft=False)
 
-			self.silhouette_score = silhouette_score(self.results, self.clu.membership) # calculate silhouette score
-
-		else:
-			print('Clustering not yet determined. Assign clusters with self.clu.assign().\n')
-			return
+		sns.despine(left=True, bottom=True)
+		fig.tight_layout()
 
 
 
@@ -310,6 +319,30 @@ class fcc_tSNE(DR):
 		plt.scatter(self.results[:,0], self.results[:,1], s=75, alpha=0.7, c=self.clu.density)
 		plt.xlabel('t-SNE 1', fontsize=14)
 		plt.ylabel('t-SNE 2', fontsize=14)
+		plt.tick_params(labelbottom=False, labelleft=False)
+		sns.despine(left=True, bottom=True)
+		plt.tight_layout()
+		plt.show()
+		plt.close()
+
+
+
+class fcc_FItSNE(DR):
+	'''
+	Object containing FIt-SNE (https://github.com/KlugerLab/FIt-SNE) of high-dimensional dataset of shape (n_cells, n_features) to reduce to n_components
+	'''
+	def __init__(self, matrix, perplexity):
+		DR.__init__(self, matrix) # inherits from DR object
+		self.perplexity = perplexity # store tSNE perplexity as metadata
+		self.results = fast_tsne(self.input, perplexity=self.perplexity)
+		self.clu = Cluster(self.results.astype('double'), autoplot=False) # get density-peak cluster information for results to use for plotting
+
+
+	def plot(self):
+		plt.figure(figsize=(5,5))
+		plt.scatter(self.results[:,0], self.results[:,1], s=75, alpha=0.7, c=self.clu.density)
+		plt.xlabel('FIt-SNE 1', fontsize=14)
+		plt.ylabel('FIt-SNE 2', fontsize=14)
 		plt.tick_params(labelbottom=False, labelleft=False)
 		sns.despine(left=True, bottom=True)
 		plt.tight_layout()
