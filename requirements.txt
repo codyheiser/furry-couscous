@@ -56,6 +56,7 @@ notebook==5.7.2
 numba==0.40.1
 numexpr==2.6.8
 numpy==1.15.4
+NVR==0.0.6
 pandas==0.22.0
 pandocfilters==1.4.2
 parso==0.3.1
@@ -84,6 +85,7 @@ scikit-bio==0.5.4
 scikit-learn==0.20.0
 scipy==1.1.0
 scvi==0.2.1
+scvis==0.1.0
 seaborn==0.9.0
 Send2Trash==1.5.0
 simplegeneric==0.8.1
