@@ -31,6 +31,51 @@ def read_hdf5(filename):
 		return hdf5out
 
 
+def compare_distance_dist(pre, post, plot_out=True):
+	'''
+	Compare probability distributions of cell-cell Euclidean distance matrices using EMD and KLD.
+		pre = distance matrix of shape (n_cells, n_cells) before transformation/projection
+		post = distance matrix of shape (n_cells, n_cells) after transformation/projection
+		plot_out = print plots as well as return stats?
+	'''
+	# for each matrix, take the upper triangle (it's symmetrical) for calculating EMD and plotting distance differences
+	pre_flat = pre[np.triu_indices(pre.shape[1],1)]
+	post_flat = post[np.triu_indices(post.shape[1],1)]
+
+	# normalize flattened distances within each set for fair comparison of probability distributions
+	pre_flat_norm = (pre_flat/pre_flat.max())
+	post_flat_norm = (post_flat/post_flat.max())
+
+	# calculate EMD for the distance matrices
+	EMD = sc.stats.wasserstein_distance(pre_flat_norm, post_flat_norm)
+
+	# Kullback Leibler divergence
+	# add very small number to avoid dividing by zero
+	KLD = sc.stats.entropy(pre_flat_norm+0.00000001) - sc.stats.entropy(post_flat_norm+0.00000001)
+
+	if plot_out:
+		plt.figure(figsize=(5,5))
+
+		# calculate and plot the cumulative probability distributions for cell-cell distances in each dataset
+		num_bins = int(len(pre_flat_norm)/100)
+		pre_counts, pre_bin_edges = np.histogram (pre_flat_norm, bins=num_bins)
+		pre_cdf = np.cumsum (pre_counts)
+		post_counts, post_bin_edges = np.histogram (post_flat_norm, bins=num_bins)
+		post_cdf = np.cumsum (post_counts)
+		plt.plot(pre_bin_edges[1:], pre_cdf/pre_cdf[-1], label='pre')
+		plt.plot(post_bin_edges[1:], post_cdf/post_cdf[-1], label='post')
+		plt.figtext(0.99, 0.3, 'EMD: {}\n\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)
+		plt.title('Cumulative Probability of Normalized Distances', fontsize=16)
+		plt.legend(loc='best',fontsize=14)
+		plt.tick_params(labelsize=12)
+
+		sns.despine()
+		plt.tight_layout()
+		plt.show()
+
+	return EMD, KLD
+
+
 def compare_euclid(pre, post, plot_out=True):
 	'''
 	Test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
