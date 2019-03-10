@@ -91,7 +91,6 @@ class RNA_counts():
 
 		# then subset data by rank-ordered barcode appearance
 		if ranks=='all':
-			assert self.barcodes is not None, 'Barcodes not assigned.\n'
 			return sc.spatial.distance_matrix(transformed, transformed)
 
 		elif not isinstance(ranks, (list,)): # make sure input is list-formatted
@@ -140,7 +139,7 @@ class RNA_counts():
 		return self.barcodes.value_counts()[self.barcodes.value_counts().index.isin(IDs)]
 
 
-	def arcsinh_norm(self, norm='l2', scale=1000, ranks='all'):
+	def arcsinh_norm(self, norm='l1', scale=1000, ranks='all'):
 		'''
 		Perform an arcsinh-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
 		Useful for feeding into PCA or tSNE.
@@ -170,7 +169,7 @@ class RNA_counts():
 		return out[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed counts array
 
 
-	def log2_norm(self, norm='l2'):
+	def log2_norm(self, norm='l1'):
 		'''
 		Perform a log2-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
 		Useful for feeding into PCA or tSNE.
