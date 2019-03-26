@@ -169,7 +169,7 @@ class RNA_counts():
 		return out[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed counts array
 
 
-	def log2_norm(self, norm='l1'):
+	def log2_norm(self, norm='l1', ranks='all'):
 		'''
 		Perform a log2-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
 		Useful for feeding into PCA or tSNE.
@@ -559,11 +559,15 @@ class fcc_FItSNE(DR):
 	'''
 	Object containing FIt-SNE (https://github.com/KlugerLab/FIt-SNE) of high-dimensional dataset of shape (n_cells, n_features) to reduce to n_components
 	'''
-	def __init__(self, matrix, perplexity, barcodes=None):
+	def __init__(self, matrix, perplexity, seed=-1, barcodes=None, clean_workspace=True):
 		DR.__init__(self, matrix, barcodes) # inherits from DR object
 		self.perplexity = perplexity # store tSNE perplexity as metadata
-		self.results = fast_tsne(self.input, perplexity=self.perplexity)
+		self.results = fast_tsne(self.input, perplexity=self.perplexity, seed=seed)
 		self.clu = Cluster(self.results.astype('double'), autoplot=False) # get density-peak cluster information for results to use for plotting
+		if clean_workspace:
+			# get rid of files used by C++ to run FFT t-SNE 
+			os.remove('data.dat')
+			os.remove('result.dat')
 
 
 	def plot(self):
