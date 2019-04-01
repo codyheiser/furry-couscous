@@ -145,7 +145,7 @@ class RNA_counts():
 		Useful for feeding into PCA or tSNE.
 			scale = factor to multiply values by before arcsinh-transform. scales values away from [0,1] in order to make arcsinh more effective.
 			ranks = which barcodes to include as list of indices or strings with barcode IDs
-			norm = normalization strategy prior to Log2 transorm. 
+			norm = normalization strategy prior to Log2 transorm.
 				None: do not normalize data
 				'l1': divide each count by sum of counts for each cell
 				'l2': divide each count by sqrt of sum of squares of counts for cell.
@@ -173,7 +173,7 @@ class RNA_counts():
 		'''
 		Perform a log2-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
 		Useful for feeding into PCA or tSNE.
-			norm = normalization strategy prior to Log2 transorm. 
+			norm = normalization strategy prior to Log2 transorm.
 				None: do not normalize data
 				'l1': divide each count by sum of counts for each cell
 				'l2': divide each count by sqrt of sum of squares of counts for cell.
@@ -236,8 +236,13 @@ class RNA_counts():
 
 
 	@classmethod
-	def drop_set(cls, counts_obj, drop_index, axis):
-		'''drop cells (axis 0) or genes (axis 1) with a pd.Index list. return RNA_counts object with reduced data.'''
+	def drop_set(cls, counts_obj, drop_index, axis, num=False):
+		'''
+		drop cells (axis 0) or genes (axis 1) with a pd.Index list. return RNA_counts object with reduced data.
+			keep_index: list of indices to keep
+			axis: 0 to subset cells, 1 to subset genes
+			num: numerical index (iloc) or index by labels (loc)?
+		'''
 		if counts_obj.barcodes is not None:
 			codes = pd.DataFrame(counts_obj.barcodes)
 			codes['Cell Barcode'] = codes.index # make barcodes mergeable when calling cls()
@@ -245,7 +250,41 @@ class RNA_counts():
 		else:
 			codes=None
 
-		return cls(counts_obj.data.drop(drop_index, axis=axis), labels=[counts_obj.cell_labels, counts_obj.gene_labels], barcodes=codes)
+		if not num:
+			return cls(counts_obj.data.drop(drop_index, axis=axis), labels=[counts_obj.cell_labels, counts_obj.gene_labels], barcodes=codes)
+
+		else:
+			return cls(counts_obj.data.drop(counts_obj.data.columns[drop_index], axis=axis), labels=[counts_obj.cell_labels, counts_obj.gene_labels], barcodes=codes)
+
+
+	@classmethod
+	def keep_set(cls, counts_obj, keep_index, axis, num=False):
+		'''
+		keep cells (axis 0) or genes (axis 1) with a pd.Index list. return RNA_counts object with reduced data.
+			keep_index: list of indices to keep
+			axis: 0 to subset cells, 1 to subset genes
+			num: numerical index (iloc) or index by labels (loc)?
+		'''
+		if counts_obj.barcodes is not None:
+			codes = pd.DataFrame(counts_obj.barcodes)
+			codes['Cell Barcode'] = codes.index # make barcodes mergeable when calling cls()
+
+		else:
+			codes=None
+
+		if not num:
+			if axis==0:
+				return cls(counts_obj.data.loc[keep_index,:], labels=[counts_obj.cell_labels, counts_obj.gene_labels], barcodes=codes)
+
+			elif axis==1:
+				return cls(counts_obj.data.loc[:,keep_index], labels=[counts_obj.cell_labels, counts_obj.gene_labels], barcodes=codes)
+
+		else:
+			if axis==0:
+				return cls(counts_obj.data.iloc[keep_index,:], labels=[counts_obj.cell_labels, counts_obj.gene_labels], barcodes=codes)
+
+			elif axis==1:
+				return cls(counts_obj.data.iloc[:,keep_index], labels=[counts_obj.cell_labels, counts_obj.gene_labels], barcodes=codes)
 
 
 	@classmethod
@@ -565,7 +604,7 @@ class fcc_FItSNE(DR):
 		self.results = fast_tsne(self.input, perplexity=self.perplexity, seed=seed)
 		self.clu = Cluster(self.results.astype('double'), autoplot=False) # get density-peak cluster information for results to use for plotting
 		if clean_workspace:
-			# get rid of files used by C++ to run FFT t-SNE 
+			# get rid of files used by C++ to run FFT t-SNE
 			os.remove('data.dat')
 			os.remove('result.dat')
 
