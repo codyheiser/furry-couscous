@@ -29,6 +29,8 @@ from umap import UMAP                           # UMAP
 # FIt-SNE
 import sys; sys.path.append('/Users/Cody/git/FIt-SNE')	# ensure path to FIt-SNE repo is correct!
 from fast_tsne import fast_tsne					# FIt-SNE
+# ZIFA
+from ZIFA import block_ZIFA
 # NVR
 import nvr 										# NVR
 # plotting packages
@@ -472,6 +474,47 @@ class DR():
 		fig.tight_layout()
 
 
+	def plot(self):
+		plt.figure(figsize=(5,5))
+		sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.clu.density, legend=None, edgecolor='none')
+		plt.xlabel('{} 1'.format(self.name), fontsize=14)
+		plt.ylabel('{} 2'.format(self.name), fontsize=14)
+		plt.tick_params(labelbottom=False, labelleft=False)
+		sns.despine(left=True, bottom=True)
+		plt.tight_layout()
+		plt.show()
+		plt.close()
+
+
+	def plot_barcodes(self, ranks='all'):
+		'''
+		Plot projection colored by barcode
+			ranks: Rank barcodes by occurrence in dataset and plot list of ranks (e.g. [1,2,3] or np.arange(1:4) for top 3 codes). Default all codes plotted.
+		'''
+		assert self.barcodes is not None, 'Barcodes not assigned.\n'
+		plt.figure(figsize=(5,5))
+
+		if ranks == 'all':
+			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=None, edgecolor='none')
+
+		else:
+			ints = [x for x in ranks if type(x)==int] # pull out rank values
+			IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
+			ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
+			ranks_codes = self.barcodes[self.barcodes.isin(list(ranks_i) + IDs)] # subset barcodes series
+			ranks_results = self.results[self.barcodes.isin(list(ranks_i) + IDs)] # subset results array
+			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.1, color='gray', legend=None, edgecolor='none')
+			sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=75, alpha=0.7, legend=False, hue=ranks_codes, edgecolor='none')
+
+		plt.xlabel('{} 1'.format(self.name), fontsize=14)
+		plt.ylabel('{} 2'.format(self.name), fontsize=14)
+		plt.tick_params(labelbottom=False, labelleft=False)
+		sns.despine(left=True, bottom=True)
+		plt.tight_layout()
+		plt.show()
+		plt.close()
+
+
 
 class fcc_PCA(DR):
 	'''
@@ -479,13 +522,14 @@ class fcc_PCA(DR):
 	'''
 	def __init__(self, matrix, n_components, barcodes=None):
 		DR.__init__(self, matrix, barcodes) # inherits from DR object
+		self.name = 'PC'
 		self.components = n_components # store number of components as metadata
 		self.fit = PCA(n_components=self.components).fit(self.input) # fit PCA to data
 		self.results = self.fit.transform(self.input) # transform data to fit
 		self.clu = Cluster(self.results, autoplot=False) # get density-peak cluster information for results to use for plotting
 
 
-	def plot(self):
+	def plot_PCA(self):
 		plt.figure(figsize=(10,5))
 
 		plt.subplot(121)
@@ -508,89 +552,19 @@ class fcc_PCA(DR):
 		plt.close()
 
 
-	def plot_barcodes(self, ranks='all'):
-		'''
-		Plot projection colored by barcode
-			ranks: Rank barcodes by occurrence in dataset and plot list of ranks (e.g. [1,2,3] or np.arange(1:4) for top 3 codes). Default all codes plotted.
-		'''
-		assert self.barcodes is not None, 'Barcodes not assigned.\n'
-		plt.figure(figsize=(5,5))
-
-		if ranks == 'all':
-			sns.scatterplot(x=self.results[:,0], y=self.results[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=None, edgecolor='none')
-
-		else:
-			ints = [x for x in ranks if type(x)==int] # pull out rank values
-			IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
-			ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
-			ranks_codes = self.barcodes[self.barcodes.isin(list(ranks_i) + IDs)] # subset barcodes series
-			ranks_results = self.results[self.barcodes.isin(list(ranks_i) + IDs)] # subset results array
-			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.1, color='gray', legend=None, edgecolor='none')
-			sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=75, alpha=0.7, legend=False, hue=ranks_codes, edgecolor='none')
-
-		plt.tick_params(labelbottom=False, labelleft=False)
-		plt.ylabel('PC2', fontsize=14)
-		plt.xlabel('PC1', fontsize=14)
-		plt.title('PCA', fontsize=16)
-
-		sns.despine()
-		plt.tight_layout()
-		plt.show()
-		plt.close()
-
-
 
 class fcc_tSNE(DR):
 	'''
 	Object containing t-SNE of high-dimensional dataset of shape (n_cells, n_features) to reduce to n_components
 	'''
-	def __init__(self, matrix, perplexity, n_components=2, barcodes=None):
+	def __init__(self, matrix, perplexity, n_components=2, metric='euclidean', seed=None, barcodes=None):
 		DR.__init__(self, matrix, barcodes) # inherits from DR object
+		self.name = 't-SNE'
 		self.components = n_components # store number of components as metadata
 		self.perplexity = perplexity # store tSNE perplexity as metadata
-		self.results = TSNE(n_components=self.components, perplexity=self.perplexity).fit_transform(self.input)
+		self.metric = metric
+		self.results = TSNE(n_components=self.components, perplexity=self.perplexity, metric=self.metric, random_state=seed).fit_transform(self.input)
 		self.clu = Cluster(self.results.astype('double'), autoplot=False) # get density-peak cluster information for results to use for plotting
-
-
-	def plot(self):
-		plt.figure(figsize=(5,5))
-		sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.clu.density, legend=None, edgecolor='none')
-		plt.xlabel('t-SNE 1', fontsize=14)
-		plt.ylabel('t-SNE 2', fontsize=14)
-		plt.tick_params(labelbottom=False, labelleft=False)
-		sns.despine(left=True, bottom=True)
-		plt.tight_layout()
-		plt.show()
-		plt.close()
-
-
-	def plot_barcodes(self, ranks='all'):
-		'''
-		Plot projection colored by barcode
-			ranks: Rank barcodes by occurrence in dataset and plot list of ranks (e.g. [1,2,3] or np.arange(1:4) for top 3 codes). Default all codes plotted.
-		'''
-		assert self.barcodes is not None, 'Barcodes not assigned.\n'
-		plt.figure(figsize=(5,5))
-
-		if ranks == 'all':
-			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=None, edgecolor='none')
-
-		else:
-			ints = [x for x in ranks if type(x)==int] # pull out rank values
-			IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
-			ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
-			ranks_codes = self.barcodes[self.barcodes.isin(list(ranks_i) + IDs)] # subset barcodes series
-			ranks_results = self.results[self.barcodes.isin(list(ranks_i) + IDs)] # subset results array
-			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.1, color='gray', legend=None, edgecolor='none')
-			sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=75, alpha=0.7, legend=False, hue=ranks_codes, edgecolor='none')
-
-		plt.xlabel('t-SNE 1', fontsize=14)
-		plt.ylabel('t-SNE 2', fontsize=14)
-		plt.tick_params(labelbottom=False, labelleft=False)
-		sns.despine(left=True, bottom=True)
-		plt.tight_layout()
-		plt.show()
-		plt.close()
 
 
 
@@ -600,6 +574,7 @@ class fcc_FItSNE(DR):
 	'''
 	def __init__(self, matrix, perplexity, seed=-1, barcodes=None, clean_workspace=True):
 		DR.__init__(self, matrix, barcodes) # inherits from DR object
+		self.name = 'FIt-SNE'
 		self.perplexity = perplexity # store tSNE perplexity as metadata
 		self.results = fast_tsne(self.input, perplexity=self.perplexity, seed=seed)
 		self.clu = Cluster(self.results.astype('double'), autoplot=False) # get density-peak cluster information for results to use for plotting
@@ -609,100 +584,19 @@ class fcc_FItSNE(DR):
 			os.remove('result.dat')
 
 
-	def plot(self):
-		plt.figure(figsize=(5,5))
-		sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.clu.density, legend=None, edgecolor='none')
-		plt.xlabel('FIt-SNE 1', fontsize=14)
-		plt.ylabel('FIt-SNE 2', fontsize=14)
-		plt.tick_params(labelbottom=False, labelleft=False)
-		sns.despine(left=True, bottom=True)
-		plt.tight_layout()
-		plt.show()
-		plt.close()
-
-
-	def plot_barcodes(self, ranks='all'):
-		'''
-		Plot projection colored by barcode
-			ranks: Rank barcodes by occurrence in dataset and plot list of ranks (e.g. [1,2,3] or np.arange(1:4) for top 3 codes). Default all codes plotted.
-		'''
-		assert self.barcodes is not None, 'Barcodes not assigned.\n'
-		plt.figure(figsize=(5,5))
-
-		if ranks == 'all':
-			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=None, edgecolor='none')
-
-		else:
-			ints = [x for x in ranks if type(x)==int] # pull out rank values
-			IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
-			ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
-			ranks_codes = self.barcodes[self.barcodes.isin(list(ranks_i) + IDs)] # subset barcodes series
-			ranks_results = self.results[self.barcodes.isin(list(ranks_i) + IDs)] # subset results array
-			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.1, color='gray', legend=None, edgecolor='none')
-			sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=75, alpha=0.7, legend=False, hue=ranks_codes, edgecolor='none')
-
-		plt.xlabel('FIt-SNE 1', fontsize=14)
-		plt.ylabel('FIt-SNE 2', fontsize=14)
-		plt.tick_params(labelbottom=False, labelleft=False)
-		sns.despine(left=True, bottom=True)
-		plt.tight_layout()
-		plt.show()
-		plt.close()
-
-
 
 class fcc_UMAP(DR):
 	'''
 	Object containing UMAP of high-dimensional dataset of shape (n_cells, n_features) to reduce to 2 components
 	'''
-	def __init__(self, matrix, perplexity, min_dist=0.3, metric='correlation', barcodes=None):
+	def __init__(self, matrix, perplexity, min_dist=0.1, metric='euclidean', seed=None, barcodes=None):
 		DR.__init__(self, matrix, barcodes) # inherits from DR object
+		self.name = 'UMAP'
 		self.perplexity = perplexity
 		self.min_dist = min_dist
 		self.metric = metric
-		self.results = UMAP(n_neighbors=self.perplexity, min_dist=self.min_dist, metric=self.metric).fit_transform(self.input)
+		self.results = UMAP(n_neighbors=self.perplexity, min_dist=self.min_dist, metric=self.metric, random_state=seed).fit_transform(self.input)
 		self.clu = Cluster(self.results.astype('double'), autoplot=False)
-
-
-	def plot(self):
-		plt.figure(figsize=(5,5))
-		sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.clu.density, legend=None, edgecolor='none')
-		plt.xlabel('UMAP 1', fontsize=14)
-		plt.ylabel('UMAP 2', fontsize=14)
-		plt.tick_params(labelbottom=False, labelleft=False)
-		sns.despine(left=True, bottom=True)
-		plt.tight_layout()
-		plt.show()
-		plt.close()
-
-
-	def plot_barcodes(self, ranks='all'):
-		'''
-		Plot projection colored by barcode
-			ranks: Rank barcodes by occurrence in dataset and plot list of ranks (e.g. [1,2,3] or np.arange(1:4) for top 3 codes). Default all codes plotted.
-		'''
-		assert self.barcodes is not None, 'Barcodes not assigned.\n'
-		plt.figure(figsize=(5,5))
-
-		if ranks == 'all':
-			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=None, edgecolor='none')
-
-		else:
-			ints = [x for x in ranks if type(x)==int] # pull out rank values
-			IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
-			ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
-			ranks_codes = self.barcodes[self.barcodes.isin(list(ranks_i) + IDs)] # subset barcodes series
-			ranks_results = self.results[self.barcodes.isin(list(ranks_i) + IDs)] # subset results array
-			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.1, color='gray', legend=None, edgecolor='none')
-			sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=75, alpha=0.7, legend=False, hue=ranks_codes, edgecolor='none')
-
-		plt.xlabel('UMAP 1', fontsize=14)
-		plt.ylabel('UMAP 2', fontsize=14)
-		plt.tick_params(labelbottom=False, labelleft=False)
-		sns.despine(left=True, bottom=True)
-		plt.tight_layout()
-		plt.show()
-		plt.close()
 
 
 
@@ -713,6 +607,7 @@ class fcc_DCA(DR):
 	'''
 	def __init__(self, matrix, n_threads=2, norm=True, barcodes=None):
 		DR.__init__(self, matrix, barcodes) # inherits from DR object
+		self.name = 'DCA'
 		self.DCA_norm = norm # store normalization decision as metadata
 		self.adata = scanpy.AnnData(self.input) # generate AnnData object (https://github.com/theislab/scanpy) for passing to DCA
 		scanpy.pp.filter_genes(self.adata, min_counts=1) # remove features with 0 counts for all cells
@@ -723,4 +618,17 @@ class fcc_DCA(DR):
 			scanpy.pp.log1p(self.adata) # log-transform data with scanpy's method
 
 		self.results = self.adata.X # return the denoised data as a np.ndarray
+		self.clu = Cluster(self.results.astype('double'), autoplot=False)
+
+
+
+class fcc_ZIFA(DR):
+	'''
+	Object containing ZIFA of high-dimensional dataset of shape (n_calls, n_features) to reduce to K latent dimensions
+		NOTE: ZIFA removes features with zero in more than 95% of observations
+	'''
+	def __init__(self, matrix, K, barcodes=None):
+		DR.__init__(self, matrix, barcodes) # inherits from DR object
+		self.name = 'ZIFA'
+		self.results, self.model_params = block_ZIFA.fitModel(self.input, K)
 		self.clu = Cluster(self.results.astype('double'), autoplot=False)
