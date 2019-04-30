@@ -47,6 +47,7 @@ Markdown==3.0.1
 MarkupSafe==1.0
 matplotlib==3.0.1
 mistune==0.8.4
+mock==2.0.0
 msgpack==0.5.6
 -e git+https://github.com/biothings/mygene.py@a0c8034aeddd90e11e8561a5f19ab89b07aafd8f#egg=mygene
 natsort==5.4.1
@@ -64,6 +65,7 @@ pandas==0.22.0
 pandocfilters==1.4.2
 parso==0.3.1
 patsy==0.5.1
+pbr==5.2.0
 pexpect==4.6.0
 pickleshare==0.7.5
 POT==0.5.1
@@ -96,8 +98,9 @@ six==1.11.0
 sklearn==0.0
 statsmodels==0.9.0
 tables==3.4.4
-tensorboard==1.12.0
-tensorflow==1.12.0
+tensorboard==1.13.1
+tensorflow==1.13.1
+tensorflow-estimator==1.13.0
 termcolor==1.1.0
 terminado==0.8.1
 testpath==0.4.2
