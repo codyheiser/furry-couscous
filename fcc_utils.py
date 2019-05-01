@@ -143,7 +143,7 @@ def compare_euclid(pre, post, plot_out=True):
 		mean = sy / n
 		std = np.sqrt(sy2/n - mean*mean)
 		plt.errorbar((_[1:] + _[:-1])/2, mean, yerr=std, color=sns.color_palette()[1], elinewidth=2, linestyle='none', marker='o') # plot SD errorbars
-		plt.plot(np.linspace(0,1,100), np.linspace(0,1,100), linestyle='dashed', color='black', alpha=0.7) # plot identity line as reference for regression
+		plt.plot(np.linspace(max(min(pre_flat_norm),min(post_flat_norm)),1,100), np.linspace(max(min(pre_flat_norm),min(post_flat_norm)),1,100), linestyle='dashed', color='black', alpha=0.7) # plot identity line as reference for regression
 
 		plt.figtext(0.99, 0.3, 'R: {}\np-val: {}\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[1], mantel_stats[2]), fontsize=14)
 		plt.figtext(0.61, 0.3, 'EMD: {}\n\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)

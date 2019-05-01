@@ -624,7 +624,7 @@ class fcc_DCA(DR):
 
 class fcc_ZIFA(DR):
 	'''
-	Object containing ZIFA of high-dimensional dataset of shape (n_calls, n_features) to reduce to K latent dimensions
+	Object containing ZIFA of high-dimensional dataset of shape (n_cells, n_features) to reduce to K latent dimensions
 		NOTE: ZIFA removes features with zero in more than 95% of observations
 	'''
 	def __init__(self, matrix, K, barcodes=None):
