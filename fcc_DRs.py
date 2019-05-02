@@ -1,7 +1,7 @@
 # furry-couscous dimensionality reduction objects
 
 # @author: C Heiser
-# January 2019
+# May 2019
 
 # utility functions
 from fcc_utils import *
@@ -213,8 +213,8 @@ class RNA_counts():
 		if filetype == '.csv': # read comma-delimited tables
 			data = pd.read_csv(datafile, header=labels[1], index_col=labels[0])
 
-		elif filetype == '.txt': # read tab-delimited text files
-				data = pd.read_table(datafile, header=labels[1], index_col=labels[0])
+		elif filetype in ('.txt','.tsv'): # read tab-delimited text files
+				data = pd.read_csv(datafile, header=labels[1], index_col=labels[0], sep='\t')
 
 
 		if filetype == '.gz': # if file is g-zipped, read accordingly
@@ -223,8 +223,8 @@ class RNA_counts():
 			if filetype == '.csv':
 				data = pd.read_csv(gzip.open(datafile), header=labels[1], index_col=labels[0])
 
-			elif filetype == '.txt':
-				data = pd.read_table(gzip.open(datafile), header=labels[1], index_col=labels[0])
+			elif filetype in ('.txt','.tsv'):
+				data = pd.read_csv(gzip.open(datafile), header=labels[1], index_col=labels[0], sep='\t')
 
 
 		if barcodefile: # if barcodes provided, read in file
