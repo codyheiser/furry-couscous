@@ -21,15 +21,18 @@ arcsinh.norm <- function(counts, margin=2, norm='l1', scale=1000){
   return(out)
 }
 
-plot.DR <- function(results, colorby=NA, name=''){
+plot.DR <- function(results, colorby='c', name=''){
   # function to plot dimensionality reduction (DR) latent space
   #  results: dataframe or matrix of latent dimensions
   #  colorby: vector of values to color points by
   #  name: string containing name of DR technique for axis labels (i.e. "t-SNE", "UMAP", "SIMLR")
-  plt <- ggplot(data = results, aes(x = results[1], y = results[2]))+
-    geom_point(size=2.5, alpha=0.7, aes(color=colorby))+
+  results %>%
+    mutate(plt.colors = colorby) %>%
+    ggplot(aes(x = results[,1], y = results[,2]))+
+    geom_point(size=2.5, alpha=0.7, aes(color=factor(plt.colors)), show.legend = F)+
     labs(x = paste0(name,' 1'), y = paste0(name,' 2'))+
-    plot.opts
+    theme(legend.position = 'none')+
+    plot.opts -> plt
 
   return(plt)
 }
