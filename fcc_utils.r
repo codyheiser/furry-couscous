@@ -6,6 +6,11 @@
 require(tidyverse)
 source('ggplot_config.r')
 
+remove.zeros <- function(counts, margin=1){
+  # remove rows (margin=1) or columns (margin=2) from 'counts' dataframe that contain only zeros
+  counts[apply(counts[,-1], margin, function(x) !all(x==0)),]
+}
+
 arcsinh.norm <- function(counts, margin=2, norm='l1', scale=1000){
   # function to normalize and transform RNA counts data
   #  counts: dataframe or matrix of RNA counts values
