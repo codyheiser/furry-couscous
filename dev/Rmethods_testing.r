@@ -74,11 +74,11 @@ colon_clu_est <- SIMLR_Estimate_Number_of_Clusters(t(colon), NUMC = 2:14)
 # perform SIMLR analysis with the estimated number of clusters from above
 colon_SIMLR <- SIMLR(t(colon_norm), c = which.min(colon_clu_est$K1))
 # plot results
-plot.DR(colon_SIMLR$ydata, name='SIMLR')
+plot.DR(data.frame(colon_SIMLR$ydata), colorby = colon_SIMLR$y$cluster, name='SIMLR')
 
 # output the reduced-dimension dataset to files
-write.csv(qi_SIMLR$F, file = 'dev/Rmethods_out/colon_SIMLR_F.csv', row.names = F)
-write.csv(qi_SIMLR$ydata, file = 'dev/Rmethods_out/colon_SIMLR_ydata.csv', row.names = F)
+write.csv(colon_SIMLR$F, file = 'dev/Rmethods_out/colon_SIMLR_F.csv', row.names = F)
+write.csv(colon_SIMLR$ydata, file = 'dev/Rmethods_out/colon_SIMLR_ydata.csv', row.names = F)
 
 
 retina_norm <- arcsinh.norm(retina, margin=1) # normalize by arcsinh-tranforming fractional counts per gene
@@ -89,7 +89,7 @@ retina_clu_est <- SIMLR_Estimate_Number_of_Clusters(t(retina), NUMC = 2:14)
 # perform SIMLR analysis with the estimated number of clusters from above
 retina_SIMLR <- SIMLR(t(retina_norm), c = which.min(retina_clu_est$K1))
 # plot results
-plot.DR(retina_SIMLR$ydata, name='SIMLR')
+plot.DR(data.frame(retina_SIMLR$ydata), colorby = retina_SIMLR$y$cluster, name='SIMLR')
 
 # output the reduced-dimension dataset to files
 write.csv(retina_SIMLR$F, file = 'dev/Rmethods_out/retina_SIMLR_F.csv', row.names = F)
