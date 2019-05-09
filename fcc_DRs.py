@@ -19,6 +19,10 @@ from sklearn.decomposition import PCA        	# PCA
 from sklearn.manifold import TSNE            	# t-SNE
 from sklearn.model_selection import KFold		# K-fold cross-validation
 from sklearn.neighbors import kneighbors_graph	# K-nearest neighbors graph
+# plotting packages
+import matplotlib
+import matplotlib.pyplot as plt
+import seaborn as sns; sns.set(style = 'white')
 # density peak clustering
 from pydpc import Cluster                    	# density-peak clustering
 # DCA packages
@@ -26,17 +30,21 @@ import scanpy.api as scanpy
 from dca.api import dca                      	# DCA
 # UMAP
 from umap import UMAP                           # UMAP
+# optional packages
 # FIt-SNE
-import sys; sys.path.append('../FIt-SNE')		# ensure path to FIt-SNE repo is correct!
-from fast_tsne import fast_tsne					# FIt-SNE
+if os.path.isdir('../FIt-SNE'):
+	import sys; sys.path.append('../FIt-SNE')	# ensure path to FIt-SNE repo is correct!
+	from fast_tsne import fast_tsne				# FIt-SNE
 # ZIFA
-from ZIFA import block_ZIFA
+try:
+	from ZIFA import block_ZIFA					# ZIFA
+except ImportError:
+	print('ZIFA module not detected. Functionality will be disabled.')
 # NVR
-import nvr 										# NVR
-# plotting packages
-import matplotlib
-import matplotlib.pyplot as plt
-import seaborn as sns; sns.set(style = 'white')
+try:
+	import nvr 									# NVR
+except ImportError:
+	print('NVR module not detected. Functionality will be disabled.')
 
 
 class RNA_counts():
@@ -474,9 +482,9 @@ class DR():
 		fig.tight_layout()
 
 
-	def plot(self):
+	def plot(self, color=self.clu.density):
 		plt.figure(figsize=(5,5))
-		sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.clu.density, legend=None, edgecolor='none')
+		sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=color, legend=None, edgecolor='none')
 		plt.xlabel('{} 1'.format(self.name), fontsize=14)
 		plt.ylabel('{} 2'.format(self.name), fontsize=14)
 		plt.tick_params(labelbottom=False, labelleft=False)
@@ -529,11 +537,11 @@ class fcc_PCA(DR):
 		self.clu = Cluster(self.results, autoplot=False) # get density-peak cluster information for results to use for plotting
 
 
-	def plot_PCA(self):
+	def plot_PCA(self, color=self.clu.density):
 		plt.figure(figsize=(10,5))
 
 		plt.subplot(121)
-		sns.scatterplot(x=self.results[:,0], y=self.results[:,1], s=75, alpha=0.7, hue=self.clu.density, legend=None, edgecolor='none')
+		sns.scatterplot(x=self.results[:,0], y=self.results[:,1], s=75, alpha=0.7, hue=color, legend=None, edgecolor='none')
 		plt.tick_params(labelbottom=False, labelleft=False)
 		plt.ylabel('PC2', fontsize=14)
 		plt.xlabel('PC1', fontsize=14)
