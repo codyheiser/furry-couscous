@@ -27,7 +27,7 @@ from dca.api import dca                      	# DCA
 # UMAP
 from umap import UMAP                           # UMAP
 # FIt-SNE
-import sys; sys.path.append('/Users/Cody/git/FIt-SNE')	# ensure path to FIt-SNE repo is correct!
+import sys; sys.path.append('../FIt-SNE')		# ensure path to FIt-SNE repo is correct!
 from fast_tsne import fast_tsne					# FIt-SNE
 # ZIFA
 from ZIFA import block_ZIFA
