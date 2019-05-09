@@ -15,8 +15,8 @@ import pandas as pd
 import scipy as sc
 # scikit packages
 from sklearn.preprocessing import normalize
-from sklearn.decomposition import PCA        	# PCA
-from sklearn.manifold import TSNE            	# t-SNE
+from sklearn.decomposition import PCA			# PCA
+from sklearn.manifold import TSNE				# t-SNE
 from sklearn.model_selection import KFold		# K-fold cross-validation
 from sklearn.neighbors import kneighbors_graph	# K-nearest neighbors graph
 # plotting packages
@@ -24,12 +24,12 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns; sns.set(style = 'white')
 # density peak clustering
-from pydpc import Cluster                    	# density-peak clustering
+from pydpc import Cluster						# density-peak clustering
 # DCA packages
 import scanpy.api as scanpy
-from dca.api import dca                      	# DCA
+from dca.api import dca					  	# DCA
 # UMAP
-from umap import UMAP                           # UMAP
+from umap import UMAP						   # UMAP
 # optional packages
 # FIt-SNE
 if os.path.isdir('../FIt-SNE'):
@@ -482,7 +482,9 @@ class DR():
 		fig.tight_layout()
 
 
-	def plot(self, color=self.clu.density):
+	def plot(self, color=None):
+		if color is None:
+			color = self.clu.density
 		plt.figure(figsize=(5,5))
 		sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=color, legend=None, edgecolor='none')
 		plt.xlabel('{} 1'.format(self.name), fontsize=14)
@@ -537,7 +539,9 @@ class fcc_PCA(DR):
 		self.clu = Cluster(self.results, autoplot=False) # get density-peak cluster information for results to use for plotting
 
 
-	def plot_PCA(self, color=self.clu.density):
+	def plot_PCA(self, color=None):
+		if color is None:
+			color = self.clu.density
 		plt.figure(figsize=(10,5))
 
 		plt.subplot(121)
