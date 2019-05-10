@@ -1,7 +1,7 @@
 # furry-couscous utility functions
 
 # @author: C Heiser
-# November 2018
+# May 2019
 
 # packages for reading in data files
 import h5py
@@ -76,6 +76,60 @@ def compare_distance_dist(pre, post, plot_out=True):
 	return EMD, KLD
 
 
+def plot_cell_distances(pre_norm, post_norm):
+	'''
+	plot all unique cell-cell distances before and after some transformation. Executes matplotlib.pyplot.plot(), does not initialize figure.
+		pre_norm: flattened vector of normalized, unique cell-cell distances "pre-transformation".
+			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
+		post_norm: flattened vector of normalized, unique cell-cell distances "post-transformation".
+			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
+	'''
+	plt.plot(pre_norm, alpha=0.5, label='pre')
+	plt.plot(post_norm, alpha=0.5, label='post')
+	plt.title('Normalized Unique Distances', fontsize=16)
+	plt.legend(loc='best',fontsize=14)
+	plt.tick_params(labelsize=12, labelbottom=False)
+
+
+def plot_distance_distributions(pre_norm, post_norm):
+	'''
+	plot cumulative probability distributions for all unique cell-cell distances before and after some transformation. Executes matplotlib.pyplot.plot(), does not initialize figure.
+		pre_norm: flattened vector of normalized, unique cell-cell distances "pre-transformation".
+			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
+		post_norm: flattened vector of normalized, unique cell-cell distances "post-transformation".
+			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
+	'''
+	num_bins = int(len(pre_norm)/100)
+	pre_counts, pre_bin_edges = np.histogram (pre_norm, bins=num_bins)
+	pre_cdf = np.cumsum (pre_counts)
+	post_counts, post_bin_edges = np.histogram (post_norm, bins=num_bins)
+	post_cdf = np.cumsum (post_counts)
+	plt.plot(pre_bin_edges[1:], pre_cdf/pre_cdf[-1], label='pre')
+	plt.plot(post_bin_edges[1:], post_cdf/post_cdf[-1], label='post')
+	plt.title('Cumulative Probability of Normalized Distances', fontsize=16)
+	plt.legend(loc='best',fontsize=14)
+	plt.tick_params(labelsize=12)
+
+
+def plot_distance_correlation(pre_norm, post_norm):
+	'''
+	plot correlation of all unique cell-cell distances before and after some transformation. Executes matplotlib.pyplot.plot(), does not initialize figure.
+		pre_norm: flattened vector of normalized, unique cell-cell distances "pre-transformation".
+			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
+		post_norm: flattened vector of normalized, unique cell-cell distances "post-transformation".
+			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
+	'''
+	sns.scatterplot(pre_norm, post_norm, s=75, alpha=0.3)
+	nbins = 12
+	n, _ = np.histogram(pre_norm, bins=nbins)
+	sy, _ = np.histogram(pre_norm, bins=nbins, weights=post_norm)
+	sy2, _ = np.histogram(pre_norm, bins=nbins, weights=post_norm*post_norm)
+	mean = sy / n
+	std = np.sqrt(sy2/n - mean*mean)
+	plt.errorbar((_[1:] + _[:-1])/2, mean, yerr=std, elinewidth=2, color=sns.color_palette()[1], linestyle='none', marker='o') # plot SD errorbars
+	plt.plot(np.linspace(max(min(pre_norm),min(post_norm)),1,100), np.linspace(max(min(pre_norm),min(post_norm)),1,100), linestyle='dashed', color='black', alpha=0.7) # plot identity line as reference for regression
+
+
 def compare_euclid(pre, post, plot_out=True):
 	'''
 	Test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
@@ -114,36 +168,15 @@ def compare_euclid(pre, post, plot_out=True):
 
 		plt.subplot(131)
 		# plot unique cell-cell distances
-		plt.plot(pre_flat_norm, alpha=0.5, label='pre')
-		plt.plot(post_flat_norm, alpha=0.5, label='post')
-		plt.title('Normalized Unique Distances', fontsize=16)
-		plt.legend(loc='best',fontsize=14)
-		plt.tick_params(labelsize=12, labelbottom=False)
+		plot_cell_distances(pre_flat_norm, post_flat_norm)
 
 		plt.subplot(132)
 		# calculate and plot the cumulative probability distributions for cell-cell distances in each dataset
-		num_bins = int(len(pre_flat_norm)/100)
-		pre_counts, pre_bin_edges = np.histogram (pre_flat_norm, bins=num_bins)
-		pre_cdf = np.cumsum (pre_counts)
-		post_counts, post_bin_edges = np.histogram (post_flat_norm, bins=num_bins)
-		post_cdf = np.cumsum (post_counts)
-		plt.plot(pre_bin_edges[1:], pre_cdf/pre_cdf[-1], label='pre')
-		plt.plot(post_bin_edges[1:], post_cdf/post_cdf[-1], label='post')
-		plt.title('Cumulative Probability of Normalized Distances', fontsize=16)
-		plt.legend(loc='best',fontsize=14)
-		plt.tick_params(labelsize=12)
+		plot_distance_distributions(pre_flat_norm, post_flat_norm)
 
 		plt.subplot(133)
 		# plot correlation of distances
-		sns.scatterplot(pre_flat_norm, post_flat_norm, s=75, alpha=0.3)
-		nbins = 12
-		n, _ = np.histogram(pre_flat_norm, bins=nbins)
-		sy, _ = np.histogram(pre_flat_norm, bins=nbins, weights=post_flat_norm)
-		sy2, _ = np.histogram(pre_flat_norm, bins=nbins, weights=post_flat_norm*post_flat_norm)
-		mean = sy / n
-		std = np.sqrt(sy2/n - mean*mean)
-		plt.errorbar((_[1:] + _[:-1])/2, mean, yerr=std, color=sns.color_palette()[1], elinewidth=2, linestyle='none', marker='o') # plot SD errorbars
-		plt.plot(np.linspace(max(min(pre_flat_norm),min(post_flat_norm)),1,100), np.linspace(max(min(pre_flat_norm),min(post_flat_norm)),1,100), linestyle='dashed', color='black', alpha=0.7) # plot identity line as reference for regression
+		plot_distance_correlation(pre_flat_norm, post_flat_norm)
 
 		plt.figtext(0.99, 0.3, 'R: {}\np-val: {}\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[1], mantel_stats[2]), fontsize=14)
 		plt.figtext(0.61, 0.3, 'EMD: {}\n\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)

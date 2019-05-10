@@ -27,9 +27,9 @@ import seaborn as sns; sns.set(style = 'white')
 from pydpc import Cluster						# density-peak clustering
 # DCA packages
 import scanpy.api as scanpy
-from dca.api import dca					  	# DCA
+from dca.api import dca							# DCA
 # UMAP
-from umap import UMAP						   # UMAP
+from umap import UMAP							# UMAP
 # optional packages
 # FIt-SNE
 if os.path.isdir('../FIt-SNE'):
@@ -398,8 +398,13 @@ class RNA_counts():
 
 class DR():
 	'''Catch-all class for dimensionality reduction outputs for high-dimensional data of shape (n_cells, n_features)'''
-	def __init__(self, matrix, barcodes=None):
-		self.input = matrix # store input matrix as metadata
+	def __init__(self, matrix=None, latent=None, name='Dim', barcodes=None):
+		self.input = pd.DataFrame(matrix) # store input matrix as metadata
+		self.name = name # store placeholder name of DR technique for plotting and metadata
+
+		if latent is not None:
+			self.results = np.ascontiguousarray(latent) # if initiating DR object from results matrix, create results attribute
+			self.clu = Cluster(self.results, autoplot=False) # get density-peak cluster information for results to use for plotting
 
 		if barcodes is not None:
 			self.barcodes = barcodes # maintain given barcode information
@@ -482,7 +487,7 @@ class DR():
 		fig.tight_layout()
 
 
-	def plot(self, color=None):
+	def plot(self, color=None, save_to=None):
 		if color is None:
 			color = self.clu.density
 		plt.figure(figsize=(5,5))
@@ -492,11 +497,15 @@ class DR():
 		plt.tick_params(labelbottom=False, labelleft=False)
 		sns.despine(left=True, bottom=True)
 		plt.tight_layout()
-		plt.show()
+		if save_to is None:
+			plt.show()
+		else:
+			plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
+
 		plt.close()
 
 
-	def plot_barcodes(self, ranks='all'):
+	def plot_barcodes(self, ranks='all', save_to=None):
 		'''
 		Plot projection colored by barcode
 			ranks: Rank barcodes by occurrence in dataset and plot list of ranks (e.g. [1,2,3] or np.arange(1:4) for top 3 codes). Default all codes plotted.
@@ -521,8 +530,54 @@ class DR():
 		plt.tick_params(labelbottom=False, labelleft=False)
 		sns.despine(left=True, bottom=True)
 		plt.tight_layout()
-		plt.show()
+		if save_to is None:
+			plt.show()
+		else:
+			plt.savefig(fname=save_to, transparent=True, bbox_inches='tight')
+
 		plt.close()
+
+
+	@classmethod
+	def from_file(cls, datafile, labels=[0,0], cells_axis=0, name='Dim', barcodefile=None):
+		'''initialize object from outside file (datafile)'''
+		filetype = os.path.splitext(datafile)[1] # extract file extension to save as metadata
+
+		if filetype == '.zip': # if compressed, open the file and update filetype
+			zf = zipfile.ZipFile(datafile)
+			datafile = zf.open(os.path.splitext(datafile)[0]) # update datafile with zipfile object
+			filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
+
+
+		if filetype == '.csv': # read comma-delimited tables
+			data = pd.read_csv(datafile, header=labels[1], index_col=labels[0])
+
+		elif filetype in ('.txt','.tsv'): # read tab-delimited text files
+			data = pd.read_csv(datafile, header=labels[1], index_col=labels[0], sep='\t')
+
+
+		if filetype == '.gz': # if file is g-zipped, read accordingly
+			filetype = os.path.splitext(os.path.splitext(datafile)[0])[1] # update filetype
+
+			if filetype == '.csv':
+				data = pd.read_csv(gzip.open(datafile), header=labels[1], index_col=labels[0])
+
+			elif filetype in ('.txt','.tsv'):
+				data = pd.read_csv(gzip.open(datafile), header=labels[1], index_col=labels[0], sep='\t')
+
+		# put latent matrix into usable format
+		latent = np.array(data)
+		latent = latent.copy(order='C')
+
+
+		if barcodefile: # if barcodes provided, read in file
+			barcodes = pd.read_csv(barcodefile, index_col=0).T
+
+		else:
+			barcodes = None
+
+
+		return cls(latent=latent, name=name, barcodes=barcodes)
 
 
 
@@ -531,7 +586,7 @@ class fcc_PCA(DR):
 	Object containing Principal Component Analysis of high-dimensional dataset of shape (n_cells, n_features) to reduce to n_components
 	'''
 	def __init__(self, matrix, n_components, barcodes=None):
-		DR.__init__(self, matrix, barcodes) # inherits from DR object
+		DR.__init__(self, matrix=matrix, barcodes=barcodes) # inherits from DR object
 		self.name = 'PC'
 		self.components = n_components # store number of components as metadata
 		self.fit = PCA(n_components=self.components).fit(self.input) # fit PCA to data
@@ -539,7 +594,7 @@ class fcc_PCA(DR):
 		self.clu = Cluster(self.results, autoplot=False) # get density-peak cluster information for results to use for plotting
 
 
-	def plot_PCA(self, color=None):
+	def plot_PCA(self, color=None, save_to=None):
 		if color is None:
 			color = self.clu.density
 		plt.figure(figsize=(10,5))
@@ -560,7 +615,11 @@ class fcc_PCA(DR):
 
 		sns.despine()
 		plt.tight_layout()
-		plt.show()
+		if save_to is None:
+			plt.show()
+		else:
+			plt.savefig(fname=save_to, transparent=True, bbox_inches='tight')
+
 		plt.close()
 
 
@@ -570,7 +629,7 @@ class fcc_tSNE(DR):
 	Object containing t-SNE of high-dimensional dataset of shape (n_cells, n_features) to reduce to n_components
 	'''
 	def __init__(self, matrix, perplexity, n_components=2, metric='euclidean', seed=None, barcodes=None):
-		DR.__init__(self, matrix, barcodes) # inherits from DR object
+		DR.__init__(self, matrix=matrix, barcodes=barcodes) # inherits from DR object
 		self.name = 't-SNE'
 		self.components = n_components # store number of components as metadata
 		self.perplexity = perplexity # store tSNE perplexity as metadata
@@ -585,7 +644,7 @@ class fcc_FItSNE(DR):
 	Object containing FIt-SNE (https://github.com/KlugerLab/FIt-SNE) of high-dimensional dataset of shape (n_cells, n_features) to reduce to n_components
 	'''
 	def __init__(self, matrix, perplexity, seed=-1, barcodes=None, clean_workspace=True):
-		DR.__init__(self, matrix, barcodes) # inherits from DR object
+		DR.__init__(self, matrix=matrix, barcodes=barcodes) # inherits from DR object
 		self.name = 'FIt-SNE'
 		self.perplexity = perplexity # store tSNE perplexity as metadata
 		self.results = fast_tsne(self.input, perplexity=self.perplexity, seed=seed)
@@ -602,7 +661,7 @@ class fcc_UMAP(DR):
 	Object containing UMAP of high-dimensional dataset of shape (n_cells, n_features) to reduce to 2 components
 	'''
 	def __init__(self, matrix, perplexity, min_dist=0.1, metric='euclidean', seed=None, barcodes=None):
-		DR.__init__(self, matrix, barcodes) # inherits from DR object
+		DR.__init__(self, matrix=matrix, barcodes=barcodes) # inherits from DR object
 		self.name = 'UMAP'
 		self.perplexity = perplexity
 		self.min_dist = min_dist
@@ -618,7 +677,7 @@ class fcc_DCA(DR):
 		NOTE: DCA removes features with 0 counts for all cells prior to processing.
 	'''
 	def __init__(self, matrix, n_threads=2, norm=True, barcodes=None):
-		DR.__init__(self, matrix, barcodes) # inherits from DR object
+		DR.__init__(self, matrix=matrix, barcodes=barcodes) # inherits from DR object
 		self.name = 'DCA'
 		self.DCA_norm = norm # store normalization decision as metadata
 		self.adata = scanpy.AnnData(self.input) # generate AnnData object (https://github.com/theislab/scanpy) for passing to DCA
@@ -640,7 +699,7 @@ class fcc_ZIFA(DR):
 		NOTE: ZIFA removes features with zero in more than 95% of observations
 	'''
 	def __init__(self, matrix, K, barcodes=None):
-		DR.__init__(self, matrix, barcodes) # inherits from DR object
+		DR.__init__(self, matrix=matrix, barcodes=barcodes) # inherits from DR object
 		self.name = 'ZIFA'
 		self.results, self.model_params = block_ZIFA.fitModel(self.input, K)
 		self.clu = Cluster(self.results.astype('double'), autoplot=False)
