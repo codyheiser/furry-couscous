@@ -178,7 +178,7 @@ def compare_euclid(pre, post, plot_out=True):
 		# plot correlation of distances
 		plot_distance_correlation(pre_flat_norm, post_flat_norm)
 
-		plt.figtext(0.99, 0.3, 'R: {}\np-val: {}\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[1], mantel_stats[2]), fontsize=14)
+		plt.figtext(0.99, 0.3, 'R: {}\n\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[2]), fontsize=14)
 		plt.figtext(0.61, 0.3, 'EMD: {}\n\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)
 		plt.title('Normalized Distance Correlation', fontsize=16)
 		plt.xlabel('Pre-Transformation', fontsize=14)

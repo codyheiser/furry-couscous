@@ -487,10 +487,10 @@ class DR():
 		fig.tight_layout()
 
 
-	def plot(self, color=None, save_to=None):
+	def plot(self, color=None, save_to=None, figsize=(5,5)):
 		if color is None:
 			color = self.clu.density
-		plt.figure(figsize=(5,5))
+		plt.figure(figsize=figsize)
 		sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=color, legend=None, edgecolor='none')
 		plt.xlabel('{} 1'.format(self.name), fontsize=14)
 		plt.ylabel('{} 2'.format(self.name), fontsize=14)
@@ -505,13 +505,13 @@ class DR():
 		plt.close()
 
 
-	def plot_barcodes(self, ranks='all', save_to=None):
+	def plot_barcodes(self, ranks='all', save_to=None, figsize=(5,5)):
 		'''
 		Plot projection colored by barcode
 			ranks: Rank barcodes by occurrence in dataset and plot list of ranks (e.g. [1,2,3] or np.arange(1:4) for top 3 codes). Default all codes plotted.
 		'''
 		assert self.barcodes is not None, 'Barcodes not assigned.\n'
-		plt.figure(figsize=(5,5))
+		plt.figure(figsize=figsize)
 
 		if ranks == 'all':
 			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=None, edgecolor='none')
@@ -594,10 +594,10 @@ class fcc_PCA(DR):
 		self.clu = Cluster(self.results, autoplot=False) # get density-peak cluster information for results to use for plotting
 
 
-	def plot_PCA(self, color=None, save_to=None):
+	def plot_PCA(self, color=None, save_to=None, figsize=(10,5)):
 		if color is None:
 			color = self.clu.density
-		plt.figure(figsize=(10,5))
+		plt.figure(figsize=figsize)
 
 		plt.subplot(121)
 		sns.scatterplot(x=self.results[:,0], y=self.results[:,1], s=75, alpha=0.7, hue=color, legend=None, edgecolor='none')
