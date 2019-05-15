@@ -12,9 +12,6 @@ import scipy as sc
 # scikit packages
 from sklearn.preprocessing import normalize
 from skbio.stats.distance import mantel      	# Mantel test for correlation of Euclidean distance matrices
-from sklearn.metrics import silhouette_score 	# silhouette score for clustering
-# density peak clustering
-from pydpc import Cluster                    	# density-peak clustering
 # plotting packages
 import matplotlib
 import matplotlib.pyplot as plt
@@ -32,49 +29,38 @@ def read_hdf5(filename):
 		return hdf5out
 
 
-def compare_distance_dist(pre, post, plot_out=True):
+def distance_stats(pre, post):
 	'''
-	Compare probability distributions of cell-cell Euclidean distance matrices using EMD and KLD.
+	Test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
+	1) performs Mantel test for correlation of distance matrices (skbio.stats.distance.mantel())
+	2) normalizes unique distances (upper triangle of distance matrix) using z-score for each dataset
+	3) calculates Earth-Mover's Distance and Kullback-Leibler Divergence for normalized euclidean distance distributions between datasets
+
 		pre = distance matrix of shape (n_cells, n_cells) before transformation/projection
 		post = distance matrix of shape (n_cells, n_cells) after transformation/projection
-		plot_out = print plots as well as return stats?
 	'''
+	# make sure the number of cells in each matrix is the same
+	assert pre.shape == post.shape , 'Matrices contain different number of cells.\n{} in "pre"\n{} in "post"\n'.format(pre.shape[0], post.shape[0])
+
+	# calculate correlation coefficient and p-value for distance matrices using Mantel test
+	mantel_stats = mantel(x=pre, y=post)
+
 	# for each matrix, take the upper triangle (it's symmetrical) for calculating EMD and plotting distance differences
 	pre_flat = pre[np.triu_indices(pre.shape[1],1)]
 	post_flat = post[np.triu_indices(post.shape[1],1)]
 
-	# normalize flattened distances within each set for fair comparison of probability distributions
-	pre_flat_norm = (pre_flat/pre_flat.max())
-	post_flat_norm = (post_flat/post_flat.max())
+	# normalize flattened distances by z-score within each set for fair comparison of probability distributions
+	pre_flat_norm = (pre_flat-pre_flat.min())/(pre_flat.max()-pre_flat.min())
+	post_flat_norm = (post_flat-post_flat.min())/(post_flat.max()-post_flat.min())
 
 	# calculate EMD for the distance matrices
 	EMD = sc.stats.wasserstein_distance(pre_flat_norm, post_flat_norm)
 
 	# Kullback Leibler divergence
 	# add very small number to avoid dividing by zero
-	KLD = sc.stats.entropy(pre_flat_norm+0.00000001) - sc.stats.entropy(post_flat_norm+0.00000001)
+	KLD = sc.stats.entropy(pre_flat_norm+0.00000001, post_flat_norm+0.00000001)
 
-	if plot_out:
-		plt.figure(figsize=(5,5))
-
-		# calculate and plot the cumulative probability distributions for cell-cell distances in each dataset
-		num_bins = int(len(pre_flat_norm)/100)
-		pre_counts, pre_bin_edges = np.histogram (pre_flat_norm, bins=num_bins)
-		pre_cdf = np.cumsum (pre_counts)
-		post_counts, post_bin_edges = np.histogram (post_flat_norm, bins=num_bins)
-		post_cdf = np.cumsum (post_counts)
-		plt.plot(pre_bin_edges[1:], pre_cdf/pre_cdf[-1], label='pre')
-		plt.plot(post_bin_edges[1:], post_cdf/post_cdf[-1], label='post')
-		plt.figtext(0.99, 0.3, 'EMD: {}\n\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)
-		plt.title('Cumulative Probability of Normalized Distances', fontsize=16)
-		plt.legend(loc='best',fontsize=14)
-		plt.tick_params(labelsize=12)
-
-		sns.despine()
-		plt.tight_layout()
-		plt.show()
-
-	return EMD, KLD
+	return pre_flat_norm, post_flat_norm, mantel_stats, EMD, KLD
 
 
 def plot_cell_distances(pre_norm, post_norm):
@@ -87,7 +73,7 @@ def plot_cell_distances(pre_norm, post_norm):
 	'''
 	plt.plot(pre_norm, alpha=0.7, label='pre', color=sns.cubehelix_palette()[-1])
 	plt.plot(post_norm, alpha=0.7, label='post', color=sns.cubehelix_palette()[2])
-	plt.title('Normalized Unique Distances', fontsize=16)
+	plt.title('Normalized Distances', fontsize=16)
 	plt.legend(loc='best',fontsize=14)
 	plt.tick_params(labelleft=False, labelbottom=False)
 	sns.despine()
@@ -156,7 +142,8 @@ def plot_distance_correlation(pre_norm, post_norm):
 
 def joint_plot_distance_correlation(pre_norm, post_norm):
 	'''
-	plot correlation of all unique cell-cell distances before and after some transformation. Executes matplotlib.pyplot.plot(), does not initialize figure.
+	plot correlation of all unique cell-cell distances before and after some transformation. Includes marginal plots of each distribution.
+	Executes matplotlib.pyplot.plot(), does not initialize figure.
 		pre_norm: flattened vector of normalized, unique cell-cell distances "pre-transformation".
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
 		post_norm: flattened vector of normalized, unique cell-cell distances "post-transformation".
@@ -166,8 +153,7 @@ def joint_plot_distance_correlation(pre_norm, post_norm):
 	g.plot_joint(plt.hist2d, bins=100, cmap=sns.cubehelix_palette(as_cmap=True))
 	sns.kdeplot(pre_norm, color=sns.cubehelix_palette()[-1], shade=False, bw=0.01, ax=g.ax_marg_x)
 	sns.kdeplot(post_norm, color=sns.cubehelix_palette()[-1], shade=False, bw=0.01, vertical=True, ax=g.ax_marg_y)
-	#plt.hist2d(x=pre_norm, y=post_norm, bins=100, cmap='plasma')
-	nbins = 13
+	nbins = 12
 	n, _ = np.histogram(pre_norm, bins=nbins)
 	sy, _ = np.histogram(pre_norm, bins=nbins, weights=post_norm)
 	sy2, _ = np.histogram(pre_norm, bins=nbins, weights=post_norm*post_norm)
@@ -181,47 +167,9 @@ def joint_plot_distance_correlation(pre_norm, post_norm):
 	plt.tick_params(labelleft=False, labelbottom=False)
 
 
-def distance_stats(pre, post):
-	'''
-	Test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
-	1) performs Mantel test for correlation of distance matrices (skbio.stats.distance.mantel())
-	2) normalizes unique distances (upper triangle of distance matrix) to maximum for each dataset, yielding fractions in range [0, 1]
-	3) calculates Earth-Mover's Distance and Kullback-Leibler Divergence for euclidean distance fractions between datasets
-
-		pre = distance matrix of shape (n_cells, n_cells) before transformation/projection
-		post = distance matrix of shape (n_cells, n_cells) after transformation/projection
-	'''
-	# make sure the number of cells in each matrix is the same
-	assert pre.shape == post.shape , 'Matrices contain different number of cells.\n{} in "pre"\n{} in "post"\n'.format(pre.shape[0], post.shape[0])
-
-	# calculate correlation coefficient and p-value for distance matrices using Mantel test
-	mantel_stats = mantel(x=pre, y=post)
-
-	# for each matrix, take the upper triangle (it's symmetrical) for calculating EMD and plotting distance differences
-	pre_flat = pre[np.triu_indices(pre.shape[1],1)]
-	post_flat = post[np.triu_indices(post.shape[1],1)]
-
-	# normalize flattened distances by z-score within each set for fair comparison of probability distributions
-	pre_flat_norm = (pre_flat-pre_flat.min())/(pre_flat.max()-pre_flat.min())
-	post_flat_norm = (post_flat-post_flat.min())/(post_flat.max()-post_flat.min())
-
-	# calculate EMD for the distance matrices
-	EMD = sc.stats.wasserstein_distance(pre_flat_norm, post_flat_norm)
-
-	# Kullback Leibler divergence
-	# add very small number to avoid dividing by zero
-	KLD = sc.stats.entropy(pre_flat_norm+0.00000001, post_flat_norm+0.00000001)
-
-	return pre_flat_norm, post_flat_norm, mantel_stats, EMD, KLD
-
-
 def compare_euclid(pre, post, plot_out=True):
 	'''
-	Test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
-	1) performs Mantel test for correlation of distance matrices (skbio.stats.distance.mantel())
-	2) normalizes unique distances (upper triangle of distance matrix) to maximum for each dataset, yielding fractions in range [0, 1]
-	3) calculates Earth-Mover's Distance and Kullback-Leibler Divergence for euclidean distance fractions between datasets
-	4) plots fractional Euclidean distances for both datasets, cumulative probability distribution for fractional distances, and correlation of distances in one figure
+	wrapper function for performing Mantel test, EMD, KLD, and plotting outputs
 
 		pre = distance matrix of shape (n_cells, n_cells) before transformation/projection
 		post = distance matrix of shape (n_cells, n_cells) after transformation/projection
@@ -242,8 +190,9 @@ def compare_euclid(pre, post, plot_out=True):
 		# plot correlation of distances
 		plot_distance_correlation(pre_flat_norm, post_flat_norm)
 
-		plt.figtext(0.99, 0.3, 'R: {}\n\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[2]), fontsize=14)
-		plt.figtext(0.61, 0.3, 'EMD: {}\n\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)
+		# add statistics as plot annotations
+		plt.figtext(0.99, 0.3, 'R: {}\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[2]), fontsize=14)
+		plt.figtext(0.55, 0.3, 'EMD: {}\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)
 
 		plt.tight_layout()
 		plt.show()
