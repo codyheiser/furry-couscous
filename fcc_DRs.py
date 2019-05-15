@@ -680,7 +680,7 @@ class fcc_DCA(DR):
 		DR.__init__(self, matrix=matrix, barcodes=barcodes) # inherits from DR object
 		self.name = 'DCA'
 		self.DCA_norm = norm # store normalization decision as metadata
-		self.adata = scanpy.AnnData(self.input) # generate AnnData object (https://github.com/theislab/scanpy) for passing to DCA
+		self.adata = scanpy.AnnData(matrix) # generate AnnData object (https://github.com/theislab/scanpy) for passing to DCA
 		scanpy.pp.filter_genes(self.adata, min_counts=1) # remove features with 0 counts for all cells
 		dca(self.adata, threads=n_threads) # perform DCA analysis on AnnData object
 
@@ -701,5 +701,5 @@ class fcc_ZIFA(DR):
 	def __init__(self, matrix, K, barcodes=None):
 		DR.__init__(self, matrix=matrix, barcodes=barcodes) # inherits from DR object
 		self.name = 'ZIFA'
-		self.results, self.model_params = block_ZIFA.fitModel(self.input, K)
+		self.results, self.model_params = block_ZIFA.fitModel(matrix, K)
 		self.clu = Cluster(self.results.astype('double'), autoplot=False)
