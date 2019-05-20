@@ -249,7 +249,7 @@ class RNA_counts():
 	def drop_set(cls, counts_obj, drop_index, axis, num=False):
 		'''
 		drop cells (axis 0) or genes (axis 1) with a pd.Index list. return RNA_counts object with reduced data.
-			keep_index: list of indices to keep
+			drop_index: list of indices to drop
 			axis: 0 to subset cells, 1 to subset genes
 			num: numerical index (iloc) or index by labels (loc)?
 		'''
@@ -263,8 +263,11 @@ class RNA_counts():
 		if not num:
 			return cls(counts_obj.data.drop(drop_index, axis=axis), labels=[counts_obj.cell_labels, counts_obj.gene_labels], barcodes=codes)
 
-		else:
+		elif axis==1:
 			return cls(counts_obj.data.drop(counts_obj.data.columns[drop_index], axis=axis), labels=[counts_obj.cell_labels, counts_obj.gene_labels], barcodes=codes)
+
+		elif axis==0:
+			return cls(counts_obj.data.drop(counts_obj.data.index[drop_index], axis=axis), labels=[counts_obj.cell_labels, counts_obj.gene_labels], barcodes=codes)
 
 
 	@classmethod
