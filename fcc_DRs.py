@@ -71,7 +71,13 @@ class RNA_counts():
 		cells_axis = 0 if cells as rows, 1 if cells as columns.
 	'''
 	def __init__(self, data, labels=[0,0], cells_axis=0, barcodes=None):
-		'''initialize object from np.ndarray or pd.DataFrame (data)'''
+		'''
+		initialize object from np.ndarray or pd.DataFrame (data)
+			data: pd.DataFrame containing counts
+			labels: list containing [col, row] indices of labels in DataFrame
+			cells_axis: cells x genes (0), or genes x cells (1)
+			barcodes: pd.DataFrame containing cell barcodes. Header of cell barcode column should be named 'Barcode'.
+		'''
 		self.data = pd.DataFrame(data) # store pd.DataFrame as data attribute
 
 		self.cell_labels = labels[0] # column containing cell IDs
@@ -89,8 +95,7 @@ class RNA_counts():
 		self.counts = np.ascontiguousarray(self.data) # store counts matrix as counts attribute (no labels, np.array format)
 
 		if barcodes is not None: # if barcodes df provided, merge with data
-			data_coded = self.data.merge(pd.DataFrame(barcodes), left_index=True, right_on='Cell Barcode', how='left')
-			data_coded = data_coded.set_index('Cell Barcode', drop=True)
+			data_coded = self.data.merge(barcodes, left_index=True, right_index=True, how='left')
 			data_coded = data_coded.astype({'Barcode':'category'})
 			self.data_coded = data_coded # create 'coded' attribute that has data and barcodes
 			self.barcodes = data_coded['Barcode'] # make barcodes attribute pd.Series for passing to other classes
@@ -225,7 +230,13 @@ class RNA_counts():
 
 	@classmethod
 	def from_file(cls, datafile, labels=[0,0], cells_axis=0, barcodefile=None):
-		'''initialize object from outside file (datafile)'''
+		'''
+		initialize object from outside file (datafile)
+			datafile: tab- or comma-delimited (.tsv/.txt/.csv) file containing counts data
+			labels: list containing [col, row] indices of labels in DataFrame
+			cells_axis: cells x genes (0), or genes x cells (1)
+			barcodes: comma-delimited (.csv) file containing vertical vector of cell barcode IDs
+		'''
 		filetype = os.path.splitext(datafile)[1] # extract file extension to save as metadata
 
 		if filetype == '.zip': # if compressed, open the file and update filetype
@@ -252,7 +263,7 @@ class RNA_counts():
 
 
 		if barcodefile: # if barcodes provided, read in file
-			barcodes = pd.read_csv(barcodefile, index_col=0).T
+			barcodes = pd.read_csv(barcodefile, index_col=None, header=None, names=['Barcode'])
 
 		else:
 			barcodes = None
@@ -426,7 +437,10 @@ class DR():
 			self.clu = Cluster(self.results, autoplot=False) # get density-peak cluster information for results to use for plotting
 
 		if barcodes is not None:
-			self.barcodes = barcodes # maintain given barcode information
+			if isinstance(barcodes, pd.DataFrame):
+				self.barcodes = barcodes.iloc[:,0] # maintain given barcode information as pd.Series
+			else:
+				self.barcodes = barcodes
 
 		else:
 			self.barcodes = None
@@ -541,7 +555,7 @@ class DR():
 		fig, ax = plt.subplots(1, figsize=figsize)
 
 		if ranks == 'all':
-			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=None, edgecolor='none')
+			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=None, edgecolor='none', palette='plasma')
 
 		else:
 			ints = [x for x in ranks if type(x)==int] # pull out rank values
@@ -550,7 +564,7 @@ class DR():
 			ranks_codes = self.barcodes[self.barcodes.isin(list(ranks_i) + IDs)] # subset barcodes series
 			ranks_results = self.results[self.barcodes.isin(list(ranks_i) + IDs)] # subset results array
 			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.1, color='gray', legend=None, edgecolor='none')
-			sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=75, alpha=0.7, legend=False, hue=ranks_codes, edgecolor='none')
+			sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=75, alpha=0.7, legend=False, hue=ranks_codes, edgecolor='none', palette='plasma')
 
 		plt.xlabel('{} 1'.format(self.name), fontsize=14)
 		ax.xaxis.set_label_coords(0.2, -0.025)
@@ -574,7 +588,13 @@ class DR():
 
 	@classmethod
 	def from_file(cls, datafile, labels=[0,0], cells_axis=0, name='Dim', barcodefile=None):
-		'''initialize object from outside file (datafile)'''
+		'''
+		initialize object from outside file (datafile)
+			datafile: tab- or comma-delimited (.tsv/.txt/.csv) file containing DR results
+			labels: list containing [col, row] indices of labels in DataFrame
+			cells_axis: cells x genes (0), or genes x cells (1)
+			barcodes: comma-delimited (.csv) file containing vertical vector of cell barcode IDs
+		'''
 		filetype = os.path.splitext(datafile)[1] # extract file extension to save as metadata
 
 		if filetype == '.zip': # if compressed, open the file and update filetype
@@ -605,7 +625,7 @@ class DR():
 
 
 		if barcodefile: # if barcodes provided, read in file
-			barcodes = pd.read_csv(barcodefile, index_col=0).T
+			barcodes = pd.read_csv(barcodefile, index_col=None, header=None, names=['Barcode'])
 
 		else:
 			barcodes = None
