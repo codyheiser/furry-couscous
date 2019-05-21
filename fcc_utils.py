@@ -63,7 +63,7 @@ def distance_stats(pre, post):
 	return pre_flat_norm, post_flat_norm, mantel_stats, EMD, KLD
 
 
-def plot_cell_distances(pre_norm, post_norm):
+def plot_cell_distances(pre_norm, post_norm, save_to=None):
 	'''
 	plot all unique cell-cell distances before and after some transformation. Executes matplotlib.pyplot.plot(), does not initialize figure.
 		pre_norm: flattened vector of normalized, unique cell-cell distances "pre-transformation".
@@ -124,8 +124,8 @@ def plot_distance_correlation(pre_norm, post_norm):
 		post_norm: flattened vector of normalized, unique cell-cell distances "post-transformation".
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
 	'''
-	plt.hist2d(x=pre_norm, y=post_norm, bins=100, cmap=sns.cubehelix_palette(as_cmap=True))
-	nbins = 13
+	plt.hist2d(x=pre_norm, y=post_norm, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
+	nbins = 12
 	n, _ = np.histogram(pre_norm, bins=nbins)
 	sy, _ = np.histogram(pre_norm, bins=nbins, weights=post_norm)
 	sy2, _ = np.histogram(pre_norm, bins=nbins, weights=post_norm*post_norm)
@@ -150,7 +150,7 @@ def joint_plot_distance_correlation(pre_norm, post_norm):
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
 	'''
 	g = sns.JointGrid(x=pre_norm, y=post_norm, space=0)
-	g.plot_joint(plt.hist2d, bins=100, cmap=sns.cubehelix_palette(as_cmap=True))
+	g.plot_joint(plt.hist2d, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
 	sns.kdeplot(pre_norm, color=sns.cubehelix_palette()[-1], shade=False, bw=0.01, ax=g.ax_marg_x)
 	sns.kdeplot(post_norm, color=sns.cubehelix_palette()[-1], shade=False, bw=0.01, vertical=True, ax=g.ax_marg_y)
 	nbins = 12
@@ -161,7 +161,6 @@ def joint_plot_distance_correlation(pre_norm, post_norm):
 	std = np.sqrt(sy2/n - mean*mean)
 	g.ax_joint.errorbar((_[1:] + _[:-1])/2, mean, yerr=std, elinewidth=2, color=sns.cubehelix_palette()[-1], linestyle='none', marker='o') # plot SD errorbars
 	g.ax_joint.plot(np.linspace(max(min(pre_norm),min(post_norm)),1,100), np.linspace(max(min(pre_norm),min(post_norm)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
-	plt.title('Normalized Distance Correlation', fontsize=16)
 	plt.xlabel('Pre-Transformation', fontsize=14)
 	plt.ylabel('Post-Transformation', fontsize=14)
 	plt.tick_params(labelleft=False, labelbottom=False)
@@ -191,8 +190,8 @@ def compare_euclid(pre, post, plot_out=True):
 		plot_distance_correlation(pre_flat_norm, post_flat_norm)
 
 		# add statistics as plot annotations
-		plt.figtext(0.99, 0.3, 'R: {}\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[2]), fontsize=14)
-		plt.figtext(0.55, 0.3, 'EMD: {}\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)
+		plt.figtext(0.99, 0.2, 'R: {}\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[2]), fontsize=14)
+		plt.figtext(0.60, 0.2, 'EMD: {}\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)
 
 		plt.tight_layout()
 		plt.show()

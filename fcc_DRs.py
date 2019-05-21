@@ -19,6 +19,7 @@ from sklearn.decomposition import PCA			# PCA
 from sklearn.manifold import TSNE				# t-SNE
 from sklearn.model_selection import KFold		# K-fold cross-validation
 from sklearn.neighbors import kneighbors_graph	# K-nearest neighbors graph
+from sklearn.metrics import silhouette_score	# silhouette score
 # plotting packages
 import matplotlib
 import matplotlib.pyplot as plt
@@ -493,13 +494,21 @@ class DR():
 	def plot(self, color=None, save_to=None, figsize=(5,5)):
 		if color is None:
 			color = self.clu.density
-		plt.figure(figsize=figsize)
+		fig, ax = plt.subplots(1, figsize=figsize)
 		sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=color, legend=None, edgecolor='none')
+
 		plt.xlabel('{} 1'.format(self.name), fontsize=14)
+		ax.xaxis.set_label_coords(0.2, -0.025)
 		plt.ylabel('{} 2'.format(self.name), fontsize=14)
+		ax.yaxis.set_label_coords(-0.025, 0.2)
+
+		plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+		plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+
 		plt.tick_params(labelbottom=False, labelleft=False)
 		sns.despine(left=True, bottom=True)
 		plt.tight_layout()
+
 		if save_to is None:
 			plt.show()
 		else:
@@ -514,7 +523,7 @@ class DR():
 			ranks: Rank barcodes by occurrence in dataset and plot list of ranks (e.g. [1,2,3] or np.arange(1:4) for top 3 codes). Default all codes plotted.
 		'''
 		assert self.barcodes is not None, 'Barcodes not assigned.\n'
-		plt.figure(figsize=figsize)
+		fig, ax = plt.subplots(1, figsize=figsize)
 
 		if ranks == 'all':
 			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=None, edgecolor='none')
@@ -529,10 +538,17 @@ class DR():
 			sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=75, alpha=0.7, legend=False, hue=ranks_codes, edgecolor='none')
 
 		plt.xlabel('{} 1'.format(self.name), fontsize=14)
+		ax.xaxis.set_label_coords(0.2, -0.025)
 		plt.ylabel('{} 2'.format(self.name), fontsize=14)
+		ax.yaxis.set_label_coords(-0.025, 0.2)
+
+		plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+		plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+
 		plt.tick_params(labelbottom=False, labelleft=False)
 		sns.despine(left=True, bottom=True)
 		plt.tight_layout()
+		
 		if save_to is None:
 			plt.show()
 		else:
@@ -631,13 +647,12 @@ class fcc_tSNE(DR):
 	'''
 	Object containing t-SNE of high-dimensional dataset of shape (n_cells, n_features) to reduce to n_components
 	'''
-	def __init__(self, matrix, perplexity, n_components=2, metric='euclidean', seed=None, barcodes=None):
+	def __init__(self, matrix, perplexity, seed=None, barcodes=None, **kwargs):
 		DR.__init__(self, matrix=matrix, barcodes=barcodes) # inherits from DR object
 		self.name = 't-SNE'
-		self.components = n_components # store number of components as metadata
 		self.perplexity = perplexity # store tSNE perplexity as metadata
-		self.metric = metric
-		self.results = TSNE(n_components=self.components, perplexity=self.perplexity, metric=self.metric, random_state=seed).fit_transform(self.input)
+		self.fit = TSNE(perplexity=self.perplexity, random_state=seed, **kwargs).fit(self.input)
+		self.results = self.fit.fit_transform(self.input)
 		self.clu = Cluster(self.results.astype('double'), autoplot=False) # get density-peak cluster information for results to use for plotting
 
 
@@ -663,13 +678,12 @@ class fcc_UMAP(DR):
 	'''
 	Object containing UMAP of high-dimensional dataset of shape (n_cells, n_features) to reduce to 2 components
 	'''
-	def __init__(self, matrix, perplexity, min_dist=0.1, metric='euclidean', seed=None, barcodes=None):
+	def __init__(self, matrix, perplexity, seed=None, barcodes=None, **kwargs):
 		DR.__init__(self, matrix=matrix, barcodes=barcodes) # inherits from DR object
 		self.name = 'UMAP'
 		self.perplexity = perplexity
-		self.min_dist = min_dist
-		self.metric = metric
-		self.results = UMAP(n_neighbors=self.perplexity, min_dist=self.min_dist, metric=self.metric, random_state=seed).fit_transform(self.input)
+		self.fit = UMAP(n_neighbors=self.perplexity, random_state=seed, **kwargs).fit(self.input)
+		self.results = self.fit.fit_transform(self.input)
 		self.clu = Cluster(self.results.astype('double'), autoplot=False)
 
 
