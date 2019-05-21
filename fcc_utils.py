@@ -11,7 +11,7 @@ import pandas as pd
 import scipy as sc
 # scikit packages
 from sklearn.preprocessing import normalize
-from skbio.stats.distance import mantel      	# Mantel test for correlation of Euclidean distance matrices
+from skbio.stats.distance import mantel      			# Mantel test for correlation of Euclidean distance matrices
 # plotting packages
 import matplotlib
 import matplotlib.pyplot as plt
@@ -73,7 +73,6 @@ def plot_cell_distances(pre_norm, post_norm, save_to=None):
 	'''
 	plt.plot(pre_norm, alpha=0.7, label='pre', color=sns.cubehelix_palette()[-1])
 	plt.plot(post_norm, alpha=0.7, label='post', color=sns.cubehelix_palette()[2])
-	plt.title('Normalized Distances', fontsize=16)
 	plt.legend(loc='best',fontsize=14)
 	plt.tick_params(labelleft=False, labelbottom=False)
 	sns.despine()
@@ -89,7 +88,6 @@ def plot_distributions(pre_norm, post_norm):
 	'''
 	sns.distplot(pre_norm, hist=False, kde=True, label='pre', color=sns.cubehelix_palette()[-1])
 	sns.distplot(post_norm, hist=False, kde=True, label='post', color=sns.cubehelix_palette()[2])
-	plt.title('Distance Distribution', fontsize=16)
 	plt.legend(loc='best',fontsize=14)
 	plt.tick_params(labelleft=False, labelbottom=False)
 	sns.despine()
@@ -110,7 +108,6 @@ def plot_cumulative_distributions(pre_norm, post_norm):
 	post_cdf = np.cumsum (post_counts)
 	plt.plot(pre_bin_edges[1:], pre_cdf/pre_cdf[-1], label='pre', color=sns.cubehelix_palette()[-1])
 	plt.plot(post_bin_edges[1:], post_cdf/post_cdf[-1], label='post', color=sns.cubehelix_palette()[2])
-	plt.title('Cumulative Distance Distribution', fontsize=16)
 	plt.legend(loc='best',fontsize=14)
 	plt.tick_params(labelleft=False, labelbottom=False)
 	sns.despine()
@@ -133,7 +130,6 @@ def plot_distance_correlation(pre_norm, post_norm):
 	std = np.sqrt(sy2/n - mean*mean)
 	plt.errorbar((_[1:] + _[:-1])/2, mean, yerr=std, elinewidth=2, color=sns.cubehelix_palette()[-1], linestyle='none', marker='o') # plot SD errorbars
 	plt.plot(np.linspace(max(min(pre_norm),min(post_norm)),1,100), np.linspace(max(min(pre_norm),min(post_norm)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
-	plt.title('Normalized Distance Correlation', fontsize=16)
 	plt.xlabel('Pre-Transformation', fontsize=14)
 	plt.ylabel('Post-Transformation', fontsize=14)
 	plt.tick_params(labelleft=False, labelbottom=False)
@@ -181,17 +177,20 @@ def compare_euclid(pre, post, plot_out=True):
 
 		plt.subplot(131)
 		plot_distributions(pre_flat_norm, post_flat_norm)
+		plt.title('Distance Distribution', fontsize=16)
 
 		plt.subplot(132)
 		plot_cumulative_distributions(pre_flat_norm, post_flat_norm)
+		plt.title('Cumulative Distance Distribution', fontsize=16)
 
 		plt.subplot(133)
 		# plot correlation of distances
 		plot_distance_correlation(pre_flat_norm, post_flat_norm)
+		plt.title('Normalized Distance Correlation', fontsize=16)
 
 		# add statistics as plot annotations
-		plt.figtext(0.99, 0.2, 'R: {}\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[2]), fontsize=14)
-		plt.figtext(0.60, 0.2, 'EMD: {}\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)
+		plt.figtext(0.99, 0.15, 'R: {}\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[2]), fontsize=14)
+		plt.figtext(0.60, 0.15, 'EMD: {}\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)
 
 		plt.tight_layout()
 		plt.show()

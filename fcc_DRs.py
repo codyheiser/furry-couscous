@@ -20,27 +20,42 @@ from sklearn.manifold import TSNE				# t-SNE
 from sklearn.model_selection import KFold		# K-fold cross-validation
 from sklearn.neighbors import kneighbors_graph	# K-nearest neighbors graph
 from sklearn.metrics import silhouette_score	# silhouette score
+# density peak clustering
+from pydpc import Cluster						# density-peak clustering
+
 # plotting packages
 import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns; sns.set(style = 'white')
-# density peak clustering
-from pydpc import Cluster						# density-peak clustering
-# DCA packages
-import scanpy.api as scanpy
-from dca.api import dca							# DCA
+
+# optional packages #
+
 # UMAP
-from umap import UMAP							# UMAP
-# optional packages
+try:
+	from umap import UMAP						# UMAP
+except ImportError:
+	print('UMAP module not detected. Functionality will be disabled.')
+
+# DCA
+try:
+	import scanpy.api as scanpy
+	from dca.api import dca						# DCA
+except ImportError:
+	print('DCA module not detected. Functionality will be disabled.')
+
 # FIt-SNE
 if os.path.isdir('../FIt-SNE'):
 	import sys; sys.path.append('../FIt-SNE')	# ensure path to FIt-SNE repo is correct!
 	from fast_tsne import fast_tsne				# FIt-SNE
+else:
+	print('FIt-SNE repository not detected. Functionality will be disabled.')
+
 # ZIFA
 try:
 	from ZIFA import block_ZIFA					# ZIFA
 except ImportError:
 	print('ZIFA module not detected. Functionality will be disabled.')
+
 # NVR
 try:
 	import nvr 									# NVR
@@ -548,7 +563,7 @@ class DR():
 		plt.tick_params(labelbottom=False, labelleft=False)
 		sns.despine(left=True, bottom=True)
 		plt.tight_layout()
-		
+
 		if save_to is None:
 			plt.show()
 		else:
@@ -621,18 +636,16 @@ class fcc_PCA(DR):
 		plt.subplot(121)
 		sns.scatterplot(x=self.results[:,0], y=self.results[:,1], s=75, alpha=0.7, hue=color, legend=None, edgecolor='none')
 		plt.tick_params(labelbottom=False, labelleft=False)
-		plt.ylabel('PC2', fontsize=14)
-		plt.xlabel('PC1', fontsize=14)
-		plt.title('PCA', fontsize=16)
+		plt.xlabel('PC 1', fontsize=14)
+		plt.ylabel('PC 2', fontsize=14)
 
 		plt.subplot(122)
 		plt.plot(np.cumsum(np.round(self.fit.explained_variance_ratio_, decimals=3)*100))
 		plt.tick_params(labelsize=12)
 		plt.ylabel('% Variance Explained', fontsize=14)
 		plt.xlabel('# of Features', fontsize=14)
-		plt.title('PCA Analysis', fontsize=16)
-
 		sns.despine()
+
 		plt.tight_layout()
 		if save_to is None:
 			plt.show()
