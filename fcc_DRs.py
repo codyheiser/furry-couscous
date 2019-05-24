@@ -479,9 +479,26 @@ class DR():
 	def top_barcodes(self, ranks):
 		'''return list of top-ranked barcodes by prevalence in dataset'''
 		assert self.barcodes is not None, 'Barcodes not assigned.\n'
+
+		if not isinstance(ranks, (list,)): # make sure input is list-formatted
+			ranks = [ranks]
+
 		ints = [x for x in ranks if type(x)==int] # pull out rank values
 		IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
 		return list(self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index) + IDs
+
+
+	def barcode_counts(self, IDs='all'):
+		'''given list of barcode IDs, return pd.Series of number of appearances in dataset'''
+		assert self.barcodes is not None, 'Barcodes not assigned.\n'
+
+		if IDs=='all':
+			return self.barcodes.value_counts()
+
+		if not isinstance(IDs, (list,)): # make sure input is list-formatted
+			IDs = [IDs]
+
+		return self.barcodes.value_counts()[self.barcodes.value_counts().index.isin(IDs)]
 
 
 	def silhouette_score(self):
