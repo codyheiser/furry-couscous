@@ -38,10 +38,9 @@ except ImportError:
 
 # DCA
 try:
-	import scanpy.api as scanpy
-	from dca.api import dca						# DCA
+	import scanpy.api as scanpy					# DCA
 except ImportError:
-	print('DCA module not detected. Functionality will be disabled.')
+	print('Scanpy module not detected. DCA Functionality will be disabled.')
 
 # FIt-SNE
 if os.path.isdir('../FIt-SNE'):
@@ -740,22 +739,30 @@ class fcc_UMAP(DR):
 
 class fcc_DCA(DR):
 	'''
-	Object containing DCA of high-dimensional dataset of shape (n_cells, n_features) to reduce to 33 components
+	Object containing DCA of high-dimensional dataset of shape (n_cells, n_features) to reduce components
 		NOTE: DCA removes features with 0 counts for all cells prior to processing.
+		mode: 'latent' to return n-dimensional latent space from hidden layer of autoencoder
+		hidden_size: size of layers for encoder (m, n, p), where n determines number of dimensions of latent space in 'latent' mode
+		norm: normalize output of DCA?
+		n_threads: parallelization of training
 	'''
-	def __init__(self, matrix, n_threads=2, norm=True, barcodes=None):
+	def __init__(self, matrix, mode='latent', hidden_size=(64,32,64), norm=True, seed=None, barcodes=None, n_threads=2):
 		DR.__init__(self, matrix=matrix, barcodes=barcodes) # inherits from DR object
 		self.name = 'DCA'
 		self.DCA_norm = norm # store normalization decision as metadata
 		self.adata = scanpy.AnnData(matrix) # generate AnnData object (https://github.com/theislab/scanpy) for passing to DCA
 		scanpy.pp.filter_genes(self.adata, min_counts=1) # remove features with 0 counts for all cells
-		dca(self.adata, threads=n_threads) # perform DCA analysis on AnnData object
+		scanpy.pp.dca(self.adata, mode=mode, threads=n_threads, random_state=seed, hidden_size=hidden_size, normalize_per_cell=False) # perform DCA analysis on AnnData object
 
 		if self.DCA_norm:
 			scanpy.pp.normalize_per_cell(self.adata) # normalize features for each cell with scanpy's method
 			scanpy.pp.log1p(self.adata) # log-transform data with scanpy's method
 
-		self.results = self.adata.X # return the denoised data as a np.ndarray
+		if mode=='latent':
+			self.results = self.adata.obsm['X_dca'] # return latent space as np.ndarray
+		elif mode=='denoise':
+			self.results = self.adata.X # return the denoised data as a np.ndarray
+
 		self.clu = Cluster(self.results.astype('double'), autoplot=False)
 
 
