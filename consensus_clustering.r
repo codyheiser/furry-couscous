@@ -2,43 +2,50 @@ library(Seurat)
 library(tidyverse)
 
 # continuous data - GEO accession # GSM2743164
-colon <- t(read.csv('inputs/GSM2743164_rep1_colon_rnaseq_filtered.tsv.gz', sep='\t', header = T))
-colon.clu <- read.csv('inputs/colon_clu.csv', header = F)
-# discrete data - GEO accession # GSM1626793
-retina <- read.csv('inputs/GSM1626793_P14Retina_1.processed.tsv', sep='\t', header = T, row.names = 1)
-retina.clu <- read.csv('inputs/retina_clu.csv', header = F)
+colon <- t(read.csv('inputs/GSM2743164_rep1_colon_rnaseq.processed.tsv', sep='\t', header = T, row.names=1, check.names = F))
+CreateSeuratObject(counts=colon) %>% FindVariableFeatures() -> colon_seurat
 
-paste0('cell',1:ncol(colon)) -> colnames(colon)
-CreateSeuratObject(counts = colon) %>%
-  FindVariableFeatures() -> colon_seurat
-
-# Identify the 10 most highly variable genes
-top10 <- head(VariableFeatures(colon_seurat), 10)
-
-# plot variable features with and without labels
-plot1 <- VariableFeaturePlot(colon_seurat)
-plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
-CombinePlots(plots = list(plot1, plot2))
-
+# process data and find clusters using graph-based method
 colon_seurat %>%
-  ScaleData() %>%
-  RunPCA(features=VariableFeatures(colon_seurat)) %>%
-  FindNeighbors() %>%
-  FindClusters() -> colon_seurat
-
-colon_seurat_clu <- colon_seurat@meta.data$seurat_clusters
-write.table(colon_seurat_clu, file = 'inputs/colon_clu_seurat.csv', row.names = F, col.names = F)
-
-BuildClusterTree(colon_seurat, graph = 'RNA_nn') %>% PlotClusterTree()
-Seurat::VariableFeaturePlot(colon_seurat)
-
-
-CreateSeuratObject(counts = t(retina)) %>%
-  FindVariableFeatures() %>%
   ScaleData() %>%
   RunPCA() %>%
   FindNeighbors() %>%
-  FindClusters() -> retina_seurat
+  FindClusters(resolution=0.25) %>%
+  RunTSNE(dims = 1:10, seed.use = 18, perplexity=30) -> colon_seurat
 
-retina_seurat_clu <- retina_seurat@meta.data$seurat_clusters
-write.table(retina_seurat_clu, file = 'inputs/retina_clu_seurat.csv', row.names = F, col.names = F)
+# visualize clusters with t-SNE
+DimPlot(colon_seurat, reduction = "tsne")
+
+# create heatmap of upregulated cluster markers
+colon.markers <- FindAllMarkers(colon_seurat, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+top10 <- colon.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+DoHeatmap(colon_seurat, features = top10$gene) + NoLegend()
+
+# export clusters to file
+write.table(colon_seurat@meta.data$seurat_clusters, file = 'inputs/colon_clu_seurat.csv', row.names = F, col.names = F)
+write.table(colon_seurat@reductions$tsne@cell.embeddings, file = 'dev/Rmethods_out/colon_seurat_tSNE.csv', row.names = T, col.names = T, sep = ',')
+
+###################################################################################################################################
+# discrete data - GEO accession # GSM1626793
+retina <- t(read.csv('inputs/GSM1626793_P14Retina_1.processed.tsv', sep='\t', header = T, row.names = 1, check.names = F))
+CreateSeuratObject(counts = retina) %>% FindVariableFeatures() -> retina_seurat
+
+# process data and find clusters using graph-based method
+retina_seurat %>%
+  ScaleData() %>%
+  RunPCA() %>%
+  FindNeighbors() %>%
+  FindClusters(resolution=0.3) %>%
+  RunTSNE(dims = 1:10, seed.use = 18, perplexity=30) -> retina_seurat
+
+# visualize clusters with t-SNE
+DimPlot(retina_seurat, reduction = "tsne")
+
+# create heatmap of upregulated cluster markers
+retina.markers <- FindAllMarkers(retina_seurat, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+top10 <- retina.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+DoHeatmap(retina_seurat, features = top10$gene) + NoLegend()
+
+# export clusters and UMAP projection to file
+write.table(retina_seurat@meta.data$seurat_clusters, file = 'inputs/retina_clu_seurat.csv', row.names = F, col.names = F)
+write.table(retina_seurat@reductions$tsne@cell.embeddings, file = 'dev/Rmethods_out/retina_seurat_tSNE.csv', row.names = T, col.names = T, sep = ',')

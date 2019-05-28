@@ -604,7 +604,7 @@ class DR():
 
 
 	@classmethod
-	def from_file(cls, datafile, labels=[0,0], cells_axis=0, name='Dim', barcodefile=None):
+	def from_file(cls, datafile, labels=[None,None], cells_axis=0, name='Dim', barcodefile=None):
 		'''
 		initialize object from outside file (datafile)
 			datafile: tab- or comma-delimited (.tsv/.txt/.csv) file containing DR results
