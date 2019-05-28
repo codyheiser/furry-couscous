@@ -28,10 +28,10 @@ Read in feature-selected datasets for testing; both are in cell-by-genes format 
 ```{r}
 # continuous data - GEO accession # GSM2743164
 colon <- read.csv('../inputs/GSM2743164_rep1_colon_rnaseq.processed.tsv', sep='\t', header = T, row.names = 1)
-colon.clu <- read.csv('../inputs/colon_clu.csv', header = F)
+colon.clu <- read.csv('../inputs/colon_clu_seurat.csv', header = F)
 # discrete data - GEO accession # GSM1626793
 retina <- read.csv('../inputs/GSM1626793_P14Retina_1.processed.tsv', sep='\t', header = T, row.names = 1)
-retina.clu <- read.csv('../inputs/retina_clu.csv', header = F)
+retina.clu <- read.csv('../inputs/retina_clu_seurat.csv', header = F)
 ```
 
 ***
@@ -39,20 +39,12 @@ retina.clu <- read.csv('../inputs/retina_clu.csv', header = F)
 From [Wang, _et al._ (2017)](https://www.ncbi.nlm.nih.gov/pubmed/28263960), SIMLR is a multikernel learning approach to dimensionality reduction, clustering, and visualization of scRNA-seq counts data. Available on [Bioconductor](https://bioconductor.org/packages/release/bioc/html/SIMLR.html).
 
 First on the colon data.
-SIMLR requires an expected number of clusters in the dataset.  We can use SIMLR to estimate this.
-```{r}
-# use SIMLR to estimate number of clusters in dataset
-# input is raw counts
-colon_clu_est <- SIMLR_Estimate_Number_of_Clusters(t(colon), NUMC = 2:14)
-print(which.min(colon_clu_est$K1))
-```
-
-Now we can normalize our counts data and feed it into the SIMLR algorithm with the expected number of clusters from above.
+We can normalize our counts data and feed it into the SIMLR algorithm with the expected number of clusters from Seurat.
 ```{r}
 colon_norm <- arcsinh.norm(colon, margin=1) # normalize by arcsinh-tranforming fractional counts per gene
 
 # perform SIMLR analysis with the estimated number of clusters from prior analysis of data
-colon_SIMLR <- SIMLR(t(colon_norm), c = 5)
+colon_SIMLR <- SIMLR(t(colon_norm), c = 5, no.dim = 2, normalize = F)
 ```
 
 ```{r}
@@ -70,7 +62,7 @@ Perform same workflow on retina data
 retina_norm <- arcsinh.norm(retina, margin=1) # normalize by arcsinh-tranforming fractional counts per gene
 
 # perform SIMLR analysis with the estimated number of clusters from prior analysis of data
-retina_SIMLR <- SIMLR(t(retina_norm), c = 7)
+retina_SIMLR <- SIMLR(t(retina_norm), c = 6, no.dim = 2, normalize = F)
 ```
 
 ```{r}
@@ -79,7 +71,7 @@ plot.DR(data.frame(retina_SIMLR$ydata), colorby = retina.clu$V1, name='SIMLR')
 ```
 
 ```{r}
-# plot results
+# plot results colored by SIMLR's clusters
 plot.DR(data.frame(retina_SIMLR$ydata), colorby = retina_SIMLR$y$cluster, name='SIMLR')
 ```
 
@@ -117,7 +109,7 @@ Perform same steps on retina data
 retina_expt <- SummarizedExperiment(assays = list(counts=data.matrix(t(retina))))
 
 # perform ZINB-WAVE analysis
-retina_zinbwave <- zinbwave(retina_expt, K=2, epsilon=1000, verbose=T, maxiter.optimize=150)
+retina_zinbwave <- zinbwave(retina_expt, K=2, epsilon=1000, verbose=T)
 # plot results
 plot.DR(data.frame(retina_zinbwave@reducedDims$zinbwave), colorby = retina.clu$V1, name = 'ZINB-WAVE')
 ```
