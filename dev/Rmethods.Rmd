@@ -28,10 +28,10 @@ Read in feature-selected datasets for testing; both are in cell-by-genes format 
 ```{r}
 # continuous data - GEO accession # GSM2743164
 colon <- read.csv('../inputs/GSM2743164_rep1_colon_rnaseq.processed.tsv', sep='\t', header = T, row.names = 1)
-colon.clu <- read.csv('../inputs/colon_clu_seurat.csv', header = F)
+colon.clu <- read.csv('pymethods_out/colon_clu.csv', header = F)
 # discrete data - GEO accession # GSM1626793
 retina <- read.csv('../inputs/GSM1626793_P14Retina_1.processed.tsv', sep='\t', header = T, row.names = 1)
-retina.clu <- read.csv('../inputs/retina_clu_seurat.csv', header = F)
+retina.clu <- read.csv('pymethods_out/retina_clu.csv', header = F)
 ```
 
 ***
@@ -44,7 +44,7 @@ We can normalize our counts data and feed it into the SIMLR algorithm with the e
 colon_norm <- arcsinh.norm(colon, margin=1) # normalize by arcsinh-tranforming fractional counts per gene
 
 # perform SIMLR analysis with the estimated number of clusters from prior analysis of data
-colon_SIMLR <- SIMLR(t(colon_norm), c = 5, no.dim = 2, normalize = F)
+colon_SIMLR <- SIMLR(t(colon_norm), c = 6, no.dim = 2, normalize = F)
 ```
 
 ```{r}
@@ -62,7 +62,7 @@ Perform same workflow on retina data
 retina_norm <- arcsinh.norm(retina, margin=1) # normalize by arcsinh-tranforming fractional counts per gene
 
 # perform SIMLR analysis with the estimated number of clusters from prior analysis of data
-retina_SIMLR <- SIMLR(t(retina_norm), c = 6, no.dim = 2, normalize = F)
+retina_SIMLR <- SIMLR(t(retina_norm), c = 9, no.dim = 2, normalize = F)
 ```
 
 ```{r}
