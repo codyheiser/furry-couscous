@@ -1,7 +1,7 @@
 # furry-couscous utility functions
 
 # @author: C Heiser
-# May 2019
+# June 2019
 
 # packages for reading in data files
 import h5py
@@ -32,7 +32,7 @@ def read_hdf5(filename):
 def distance_stats(pre, post):
 	'''
 	Test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
-	1) performs Mantel test for correlation of distance matrices (skbio.stats.distance.mantel())
+	1) performs Mantel (for symmetrical matrices) or Pearson test for correlation of distance matrices
 	2) normalizes unique distances (upper triangle of distance matrix) using z-score for each dataset
 	3) calculates Earth-Mover's Distance and Kullback-Leibler Divergence for normalized euclidean distance distributions between datasets
 
@@ -40,14 +40,22 @@ def distance_stats(pre, post):
 		post = distance matrix of shape (n_cells, n_cells) after transformation/projection
 	'''
 	# make sure the number of cells in each matrix is the same
-	assert pre.shape == post.shape , 'Matrices contain different number of cells.\n{} in "pre"\n{} in "post"\n'.format(pre.shape[0], post.shape[0])
+	assert pre.shape == post.shape , 'Matrices contain different number of distances.\n{} in "pre"\n{} in "post"\n'.format(pre.shape[0], post.shape[0])
 
-	# calculate correlation coefficient and p-value for distance matrices using Mantel test
-	mantel_stats = mantel(x=pre, y=post)
+	if pre.shape[0]==pre.shape[1] and np.allclose(pre,pre.T): # test for matrix symmetry
+		# calculate correlation coefficient and p-value for distance matrices using Mantel test
+		corr_stats = mantel(x=pre, y=post)
 
-	# for each matrix, take the upper triangle (it's symmetrical) for calculating EMD and plotting distance differences
-	pre_flat = pre[np.triu_indices(pre.shape[1],1)]
-	post_flat = post[np.triu_indices(post.shape[1],1)]
+		# for each matrix, take the upper triangle (it's symmetrical) for calculating EMD and plotting distance differences
+		pre_flat = pre[np.triu_indices(pre.shape[1],1)]
+		post_flat = post[np.triu_indices(post.shape[1],1)]
+
+	else:
+		pre_flat = pre.flatten()
+		post_flat = post.flatten()
+
+		# calculate correlation coefficient using Pearson correlation
+		corr_stats = sc.stats.pearsonr(x=pre_flat, y=post_flat)
 
 	# normalize flattened distances by z-score within each set for fair comparison of probability distributions
 	pre_flat_norm = (pre_flat-pre_flat.min())/(pre_flat.max()-pre_flat.min())
@@ -60,7 +68,7 @@ def distance_stats(pre, post):
 	# add very small number to avoid dividing by zero
 	KLD = sc.stats.entropy(pre_flat_norm+0.00000001, post_flat_norm+0.00000001)
 
-	return pre_flat_norm, post_flat_norm, mantel_stats, EMD, KLD
+	return pre_flat_norm, post_flat_norm, corr_stats, EMD, KLD
 
 
 def plot_cell_distances(pre_norm, post_norm, save_to=None):

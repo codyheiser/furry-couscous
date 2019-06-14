@@ -1,7 +1,7 @@
 # furry-couscous dimensionality reduction objects
 
 # @author: C Heiser
-# May 2019
+# June 2019
 
 # utility functions
 from fcc_utils import *
@@ -132,6 +132,29 @@ class RNA_counts():
 		ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
 		ranks_counts = transformed[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed counts array
 		return sc.spatial.distance_matrix(ranks_counts, ranks_counts)
+
+
+	def barcode_distance_matrix(self, ranks, transform=None, **kwargs):
+		'''
+		calculate Euclidean distances between cells in two barcode groups within a dataset
+			norm = how to normalize data prior to calculating distances (None, "arcsinh", "log2")
+			**kwargs = keyword arguments to pass to normalization functions
+		'''
+		assert self.barcodes is not None, 'Barcodes not assigned.\n'
+
+		# transform data first, if necessary
+		if transform is None:
+			transformed = self.counts
+
+		if transform == 'arcsinh':
+			transformed = self.arcsinh_norm(**kwargs)
+
+		elif transform == 'log2':
+			transformed = self.log2_norm(**kwargs)
+
+		ranks_0 = transformed[np.array(self.barcodes.isin(list(ranks[0])))] # subset transformed counts array to first barcode ID
+		ranks_1 = transformed[np.array(self.barcodes.isin(list(ranks[1])))] # subset transformed counts array to second barcode ID
+		return sc.spatial.distance_matrix(ranks_0, ranks_1)
 
 
 	def knn_graph(self, k, **kwargs):
@@ -460,6 +483,17 @@ class DR():
 			ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
 			ranks_results = self.results[self.barcodes.isin(list(ranks_i) + IDs)] # subset results array
 			return sc.spatial.distance_matrix(ranks_results, ranks_results)
+
+
+	def barcode_distance_matrix(self, ranks):
+		'''
+		calculate Euclidean distances between cells in two barcode groups within a dataset
+		'''
+		assert self.barcodes is not None, 'Barcodes not assigned.\n'
+
+		ranks_0 = self.results[np.array(self.barcodes.isin(list(ranks[0])))] # subset transformed counts array to first barcode ID
+		ranks_1 = self.results[np.array(self.barcodes.isin(list(ranks[1])))] # subset transformed counts array to second barcode ID
+		return sc.spatial.distance_matrix(ranks_0, ranks_1)
 
 
 	def knn_graph(self, k, ranks='all'):
