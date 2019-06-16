@@ -130,13 +130,6 @@ def plot_distance_correlation(pre_norm, post_norm):
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
 	'''
 	plt.hist2d(x=pre_norm, y=post_norm, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
-	nbins = 12
-	n, _ = np.histogram(pre_norm, bins=nbins)
-	sy, _ = np.histogram(pre_norm, bins=nbins, weights=post_norm)
-	sy2, _ = np.histogram(pre_norm, bins=nbins, weights=post_norm*post_norm)
-	mean = sy / n
-	std = np.sqrt(sy2/n - mean*mean)
-	plt.errorbar((_[1:] + _[:-1])/2, mean, yerr=std, elinewidth=2, color=sns.cubehelix_palette()[-1], linestyle='none', marker='o') # plot SD errorbars
 	plt.plot(np.linspace(max(min(pre_norm),min(post_norm)),1,100), np.linspace(max(min(pre_norm),min(post_norm)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
 	plt.xlabel('Pre-Transformation', fontsize=14)
 	plt.ylabel('Post-Transformation', fontsize=14)
@@ -157,13 +150,6 @@ def joint_plot_distance_correlation(pre_norm, post_norm):
 	g.plot_joint(plt.hist2d, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
 	sns.kdeplot(pre_norm, color=sns.cubehelix_palette()[-1], shade=False, bw=0.01, ax=g.ax_marg_x)
 	sns.kdeplot(post_norm, color=sns.cubehelix_palette()[-1], shade=False, bw=0.01, vertical=True, ax=g.ax_marg_y)
-	nbins = 12
-	n, _ = np.histogram(pre_norm, bins=nbins)
-	sy, _ = np.histogram(pre_norm, bins=nbins, weights=post_norm)
-	sy2, _ = np.histogram(pre_norm, bins=nbins, weights=post_norm*post_norm)
-	mean = sy / n
-	std = np.sqrt(sy2/n - mean*mean)
-	g.ax_joint.errorbar((_[1:] + _[:-1])/2, mean, yerr=std, elinewidth=2, color=sns.cubehelix_palette()[-1], linestyle='none', marker='o') # plot SD errorbars
 	g.ax_joint.plot(np.linspace(max(min(pre_norm),min(post_norm)),1,100), np.linspace(max(min(pre_norm),min(post_norm)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
 	plt.xlabel('Pre-Transformation', fontsize=14)
 	plt.ylabel('Post-Transformation', fontsize=14)
