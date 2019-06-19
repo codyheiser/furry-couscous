@@ -3,8 +3,6 @@
 # @author: C Heiser
 # June 2019
 
-# packages for reading in data files
-import h5py
 # basics
 import numpy as np
 import pandas as pd
@@ -18,23 +16,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns; sns.set(style = 'white')
 
 
-def read_hdf5(filename):
-		'''read in all replicates in an .hdf5 file'''
-		hdf5in = h5py.File(filename, 'r')
-		hdf5out = {} # initialize empty dictionary
-		for key in list(hdf5in.keys()):
-			hdf5out.update({key:hdf5in[key].value})
-
-		hdf5in.close()
-		return hdf5out
-
-
 def distance_stats(pre, post):
 	'''
 	Test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
 	1) performs Mantel (for symmetrical matrices) or Pearson test for correlation of distance matrices
 	2) normalizes unique distances (upper triangle of distance matrix) using z-score for each dataset
-	3) calculates Earth-Mover's Distance and Kullback-Leibler Divergence for normalized euclidean distance distributions between datasets
+	3) calculates Wasserstein or Earth-Mover's Distance for normalized euclidean distance distributions between datasets
 
 		pre = distance matrix of shape (n_cells, n_cells) before transformation/projection
 		post = distance matrix of shape (n_cells, n_cells) after transformation/projection
@@ -64,11 +51,7 @@ def distance_stats(pre, post):
 	# calculate EMD for the distance matrices
 	EMD = sc.stats.wasserstein_distance(pre_flat_norm, post_flat_norm)
 
-	# Kullback Leibler divergence
-	# add very small number to avoid dividing by zero
-	KLD = sc.stats.entropy(pre_flat_norm+0.00000001, post_flat_norm+0.00000001)
-
-	return pre_flat_norm, post_flat_norm, corr_stats, EMD, KLD
+	return pre_flat_norm, post_flat_norm, corr_stats, EMD
 
 
 def plot_cell_distances(pre_norm, post_norm, save_to=None):
@@ -137,7 +120,7 @@ def plot_distance_correlation(pre_norm, post_norm):
 	sns.despine()
 
 
-def joint_plot_distance_correlation(pre_norm, post_norm):
+def joint_plot_distance_correlation(pre_norm, post_norm, figsize=(4,4)):
 	'''
 	plot correlation of all unique cell-cell distances before and after some transformation. Includes marginal plots of each distribution.
 	Executes matplotlib.pyplot.plot(), does not initialize figure.
@@ -146,7 +129,7 @@ def joint_plot_distance_correlation(pre_norm, post_norm):
 		post_norm: flattened vector of normalized, unique cell-cell distances "post-transformation".
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
 	'''
-	g = sns.JointGrid(x=pre_norm, y=post_norm, space=0)
+	g = sns.JointGrid(x=pre_norm, y=post_norm, space=0, height=figsize[0])
 	g.plot_joint(plt.hist2d, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
 	sns.kdeplot(pre_norm, color=sns.cubehelix_palette()[-1], shade=False, bw=0.01, ax=g.ax_marg_x)
 	sns.kdeplot(post_norm, color=sns.cubehelix_palette()[-1], shade=False, bw=0.01, vertical=True, ax=g.ax_marg_y)
@@ -158,13 +141,13 @@ def joint_plot_distance_correlation(pre_norm, post_norm):
 
 def compare_euclid(pre, post, plot_out=True):
 	'''
-	wrapper function for performing Mantel test, EMD, KLD, and plotting outputs
+	wrapper function for performing Mantel/Pearson correlation, EMD, and plotting outputs
 
 		pre = distance matrix of shape (n_cells, n_cells) before transformation/projection
 		post = distance matrix of shape (n_cells, n_cells) after transformation/projection
 		plot_out = print plots as well as return stats?
 	'''
-	pre_flat_norm, post_flat_norm, mantel_stats, EMD, KLD = distance_stats(pre, post)
+	pre_flat_norm, post_flat_norm, corr_stats, EMD = distance_stats(pre, post)
 
 	if plot_out:
 		plt.figure(figsize=(15,5))
@@ -183,13 +166,13 @@ def compare_euclid(pre, post, plot_out=True):
 		plt.title('Normalized Distance Correlation', fontsize=16)
 
 		# add statistics as plot annotations
-		plt.figtext(0.99, 0.15, 'R: {}\nn: {}'.format(round(mantel_stats[0],4), mantel_stats[2]), fontsize=14)
-		plt.figtext(0.60, 0.15, 'EMD: {}\nKLD: {}'.format(round(EMD,4), round(KLD,4)), fontsize=14)
+		plt.figtext(0.99, 0.15, 'R: {}\nn: {}'.format(round(corr_stats[0],4), corr_stats[2]), fontsize=14)
+		plt.figtext(0.60, 0.15, 'EMD: {}'.format(round(EMD,4)), fontsize=14)
 
 		plt.tight_layout()
 		plt.show()
 
-	return mantel_stats, EMD, KLD
+	return corr_stats, EMD
 
 
 def knn_preservation(pre, post):

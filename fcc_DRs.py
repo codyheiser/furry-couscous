@@ -534,6 +534,64 @@ class DR():
 		return self.barcodes.value_counts()[self.barcodes.value_counts().index.isin(IDs)]
 
 
+	def arcsinh_norm(self, norm='l1', scale=1000, ranks='all'):
+		'''
+		Perform an arcsinh-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
+		Useful for feeding into PCA or tSNE.
+			scale = factor to multiply values by before arcsinh-transform. scales values away from [0,1] in order to make arcsinh more effective.
+			ranks = which barcodes to include as list of indices or strings with barcode IDs
+			norm = normalization strategy prior to Log2 transorm.
+				None: do not normalize data
+				'l1': divide each count by sum of counts for each cell
+				'l2': divide each count by sqrt of sum of squares of counts for cell.
+		'''
+		if not norm:
+			out = np.arcsinh(self.results * scale)
+
+		else:
+			out = np.arcsinh(normalize(self.results, axis=1, norm=norm) * scale)
+
+		if ranks=='all':
+			return out
+
+		elif not isinstance(ranks, (list,)): # make sure input is list-formatted
+			ranks = [ranks]
+
+		assert self.barcodes is not None, 'Barcodes not assigned.\n'
+		ints = [x for x in ranks if type(x)==int] # pull out rank values
+		IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
+		ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
+		return out[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed counts array
+
+
+	def log2_norm(self, norm='l1', ranks='all'):
+		'''
+		Perform a log2-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
+		Useful for feeding into PCA or tSNE.
+			norm = normalization strategy prior to Log2 transorm.
+				None: do not normalize data
+				'l1': divide each count by sum of counts for each cell
+				'l2': divide each count by sqrt of sum of squares of counts for cell.
+		'''
+		if not norm:
+			out = np.log2(self.results + 1)
+
+		else:
+			out = np.log2(normalize(self.results, axis=1, norm=norm) + 1)
+
+		if ranks=='all':
+			return out
+
+		elif not isinstance(ranks, (list,)): # make sure input is list-formatted
+			ranks = [ranks]
+
+		assert self.barcodes is not None, 'Barcodes not assigned.\n'
+		ints = [x for x in ranks if type(x)==int] # pull out rank values
+		IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
+		ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
+		return out[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed counts array
+
+
 	def silhouette_score(self):
 		'''calculate silhouette score of clustered results'''
 		assert hasattr(self.clu, 'membership'), 'Clustering not yet determined. Assign clusters with self.clu.assign().\n'
