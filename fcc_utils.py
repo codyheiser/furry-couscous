@@ -182,3 +182,56 @@ def knn_preservation(pre, post):
 	# make sure the number of cells in each matrix is the same
 	assert pre.shape == post.shape , 'Matrices contain different number of cells.\n{} in "pre"\n{} in "post"\n'.format(pre.shape[0], post.shape[0])
 	return np.round(((pre == post).sum()/pre.shape[0]**2)*100, 4)
+
+
+def cluster_arrangement(pre_obj, post_obj, clusters, cluster_names, figsize=(6,6), pre_transform='arcsinh', legend=True):
+	'''
+	pre_obj = RNA_counts object
+	post_obj = DR object
+	clusters = list of barcode IDs i.e. ['0','1','2'] to calculate pairwise distances between clusters 0, 1 and 2
+	cluster_names = list of cluster names for labeling i.e. ['Bipolar Cells','Rods','Amacrine Cells'] for clusters 0, 1 and 2, respectively
+	figsize = size of output figure to plot
+	pre_transform = apply transformation to pre_obj counts? (None, 'arcsinh', or 'log2')
+	legend = show legend on plot
+	'''
+	# distance calculations for pre_obj
+	dist_0_1 = pre_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[1]], transform=pre_transform).flatten()
+	dist_0_2 = pre_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[2]], transform=pre_transform).flatten()
+	dist_1_2 = pre_obj.barcode_distance_matrix(ranks=[clusters[1],clusters[2]], transform=pre_transform).flatten()
+	dist = np.append(np.append(dist_0_1,dist_0_2), dist_1_2)
+	dist_norm = (dist-dist.min())/(dist.max()-dist.min())
+	dist_norm_0_1 = dist_norm[:dist_0_1.shape[0]]
+	dist_norm_0_2 = dist_norm[dist_0_1.shape[0]:dist_0_1.shape[0]+dist_0_2.shape[0]]
+	dist_norm_1_2 = dist_norm[dist_0_1.shape[0]+dist_0_2.shape[0]:]
+
+	# distance calculations for post_obj
+	post_0_1 = post_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[1]]).flatten()
+	post_0_2 = post_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[2]]).flatten()
+	post_1_2 = post_obj.barcode_distance_matrix(ranks=[clusters[1],clusters[2]]).flatten()
+	post = np.append(np.append(post_0_1,post_0_2), post_1_2)
+	post_norm = (post-post.min())/(post.max()-post.min())
+	post_norm_0_1 = post_norm[:post_0_1.shape[0]]
+	post_norm_0_2 = post_norm[post_0_1.shape[0]:post_0_1.shape[0]+post_0_2.shape[0]]
+	post_norm_1_2 = post_norm[post_0_1.shape[0]+post_0_2.shape[0]:]
+
+	# calculate EMD and Pearson correlation stats
+	EMD = [sc.stats.wasserstein_distance(dist_norm_0_1, post_norm_0_1), sc.stats.wasserstein_distance(dist_norm_0_2, post_norm_0_2), sc.stats.wasserstein_distance(dist_norm_1_2, post_norm_1_2)]
+	corr_stats = [sc.stats.pearsonr(x=dist_0_1, y=post_0_1)[0], sc.stats.pearsonr(x=dist_0_2, y=post_0_2)[0], sc.stats.pearsonr(x=dist_1_2, y=post_1_2)[0]]
+
+	# generate jointplot
+	g = sns.JointGrid(x=dist_norm, y=post_norm, space=0, height=figsize[0])
+	g.plot_joint(plt.hist2d, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
+	sns.kdeplot(dist_norm_0_1, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkorange', label=cluster_names[0]+' - '+cluster_names[1], legend=legend)
+	sns.kdeplot(dist_norm_0_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkgreen', label=cluster_names[0]+' - '+cluster_names[2], legend=legend)
+	sns.kdeplot(dist_norm_1_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkred', label=cluster_names[1]+' - '+cluster_names[2], legend=legend)
+	if legend:
+		g.ax_marg_x.legend(loc=(1.01,0.1))
+	sns.kdeplot(post_norm_0_1, shade=False, bw=0.01, vertical=True,  color='darkorange', ax=g.ax_marg_y)
+	sns.kdeplot(post_norm_0_2, shade=False, bw=0.01, vertical=True,  color='darkgreen', ax=g.ax_marg_y)
+	sns.kdeplot(post_norm_1_2, shade=False, bw=0.01, vertical=True,  color='darkred', ax=g.ax_marg_y)
+	g.ax_joint.plot(np.linspace(max(min(dist_norm),min(post_norm)),1,100), np.linspace(max(min(dist_norm),min(post_norm)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
+	plt.xlabel('Pre-Transformation', fontsize=14)
+	plt.ylabel('Post-Transformation', fontsize=14)
+	plt.tick_params(labelleft=False, labelbottom=False)
+
+	return EMD, corr_stats
