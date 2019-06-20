@@ -1,6 +1,6 @@
 #========================= GGPLOT2 CONFIG =========================#
-# The following functions are for preferences and common settings  
-#   for use with ggplot2 visualization package
+# The following functions are for preferences and common settings
+#   for use with ggplot2 visualization package in R
 
 # set up your workspace
 require('gplots')
@@ -51,10 +51,7 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL){
     }}}
 
 # color scale
-asgn_colors <- list("primblue"="#4298cc",
-                    "primorange"="#ee7624",
-                    "primgray"="#435563",
-                    "green"="#32d339",
+my_colors <- list("green"="#32d339",
                     "yellow"="#cedc00",
                     "red"="#e1261c",
                     "purple"="#74538F",
@@ -67,9 +64,9 @@ asgn_colors <- list("primblue"="#4298cc",
 # call these by adding them (+) to a ggplot object
 plot.opts <- list(
   theme_bw(),
-  theme(text = element_text(colour = asgn_colors$darkgray),
+  theme(text = element_text(colour = my_colors$darkgray),
         legend.text=element_text(size=9),
-        axis.line = element_line(colour = asgn_colors$darkgray),
+        axis.line = element_line(colour = my_colors$darkgray),
         axis.title=element_text(size=12),
         axis.text.x=element_text(size=10),
         axis.text.y=element_text(size=10),

@@ -1,4 +1,4 @@
-# furry-couscous utility functions
+# utility functions
 
 # @author: C Heiser
 # June 2019
@@ -9,7 +9,7 @@ import pandas as pd
 import scipy as sc
 # scikit packages
 from sklearn.preprocessing import normalize
-from skbio.stats.distance import mantel      			# Mantel test for correlation of Euclidean distance matrices
+from skbio.stats.distance import mantel      			# Mantel test for correlation of symmetric distance matrices
 # plotting packages
 import matplotlib
 import matplotlib.pyplot as plt
@@ -22,7 +22,6 @@ def distance_stats(pre, post):
 	1) performs Mantel (for symmetrical matrices) or Pearson test for correlation of distance matrices
 	2) normalizes unique distances (upper triangle of distance matrix) using z-score for each dataset
 	3) calculates Wasserstein or Earth-Mover's Distance for normalized euclidean distance distributions between datasets
-
 		pre = distance matrix of shape (n_cells, n_cells) before transformation/projection
 		post = distance matrix of shape (n_cells, n_cells) after transformation/projection
 	'''
@@ -57,9 +56,9 @@ def distance_stats(pre, post):
 def plot_cell_distances(pre_norm, post_norm, save_to=None):
 	'''
 	plot all unique cell-cell distances before and after some transformation. Executes matplotlib.pyplot.plot(), does not initialize figure.
-		pre_norm: flattened vector of normalized, unique cell-cell distances "pre-transformation".
+		pre_norm = flattened vector of normalized, unique cell-cell distances "pre-transformation".
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-		post_norm: flattened vector of normalized, unique cell-cell distances "post-transformation".
+		post_norm = flattened vector of normalized, unique cell-cell distances "post-transformation".
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
 	'''
 	plt.plot(pre_norm, alpha=0.7, label='pre', color=sns.cubehelix_palette()[-1])
@@ -72,9 +71,9 @@ def plot_cell_distances(pre_norm, post_norm, save_to=None):
 def plot_distributions(pre_norm, post_norm):
 	'''
 	plot probability distributions for all unique cell-cell distances before and after some transformation. Executes matplotlib.pyplot.plot(), does not initialize figure.
-		pre_norm: flattened vector of normalized, unique cell-cell distances "pre-transformation".
+		pre_norm = flattened vector of normalized, unique cell-cell distances "pre-transformation".
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-		post_norm: flattened vector of normalized, unique cell-cell distances "post-transformation".
+		post_norm = flattened vector of normalized, unique cell-cell distances "post-transformation".
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
 	'''
 	sns.distplot(pre_norm, hist=False, kde=True, label='pre', color=sns.cubehelix_palette()[-1])
@@ -87,9 +86,9 @@ def plot_distributions(pre_norm, post_norm):
 def plot_cumulative_distributions(pre_norm, post_norm):
 	'''
 	plot cumulative probability distributions for all unique cell-cell distances before and after some transformation. Executes matplotlib.pyplot.plot(), does not initialize figure.
-		pre_norm: flattened vector of normalized, unique cell-cell distances "pre-transformation".
+		pre_norm = flattened vector of normalized, unique cell-cell distances "pre-transformation".
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-		post_norm: flattened vector of normalized, unique cell-cell distances "post-transformation".
+		post_norm = flattened vector of normalized, unique cell-cell distances "post-transformation".
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
 	'''
 	num_bins = int(len(pre_norm)/100)
@@ -124,9 +123,9 @@ def joint_plot_distance_correlation(pre_norm, post_norm, figsize=(4,4)):
 	'''
 	plot correlation of all unique cell-cell distances before and after some transformation. Includes marginal plots of each distribution.
 	Executes matplotlib.pyplot.plot(), does not initialize figure.
-		pre_norm: flattened vector of normalized, unique cell-cell distances "pre-transformation".
+		pre_norm = flattened vector of normalized, unique cell-cell distances "pre-transformation".
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-		post_norm: flattened vector of normalized, unique cell-cell distances "post-transformation".
+		post_norm = flattened vector of normalized, unique cell-cell distances "post-transformation".
 			Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
 	'''
 	g = sns.JointGrid(x=pre_norm, y=post_norm, space=0, height=figsize[0])
@@ -142,7 +141,6 @@ def joint_plot_distance_correlation(pre_norm, post_norm, figsize=(4,4)):
 def compare_euclid(pre, post, plot_out=True):
 	'''
 	wrapper function for performing Mantel/Pearson correlation, EMD, and plotting outputs
-
 		pre = distance matrix of shape (n_cells, n_cells) before transformation/projection
 		post = distance matrix of shape (n_cells, n_cells) after transformation/projection
 		plot_out = print plots as well as return stats?
@@ -178,7 +176,6 @@ def compare_euclid(pre, post, plot_out=True):
 def knn_preservation(pre, post):
 	'''
 	Test for K-nearest neighbor preservation (%) before and after transformation by a function or DR algorithm.
-
 		pre = Knn graph of shape (n_cells, n_cells) before transformation/projection
 		post = Knn graph of shape (n_cells, n_cells) after transformation/projection
 	'''
