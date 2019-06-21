@@ -1,4 +1,4 @@
-### furry-couscous: A quantitative framework for evaluating data structure preservation by dimensionality reduction techniques
+### A quantitative framework for evaluating data structure preservation by dimensionality reduction techniques
 High-dimensional data is integral to modern systems biology. Computational methods for dimensionality reduction are being rapidly developed for applications to single-cell and multi-modal technologies. In order to understand what these nonlinear transformations do to the underlying biological patterns in our data, we developed a framework of quantitative metrics for global and local distance preservation.  
 
 ![alt text](dev/outputs/Figure1.png)
