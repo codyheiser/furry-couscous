@@ -1,3 +1,8 @@
+# Louvain cluster expression analysis using Seurat
+
+# @author: C Heiser
+# May 2019
+
 library(Seurat)
 library(tidyverse)
 
@@ -5,7 +10,7 @@ library(tidyverse)
 colon <- t(read.csv('../inputs/GSM2743164_rep1_colon_rnaseq_filtered_CH.tsv.gz', sep='\t', header = T, row.names = 1, check.names = F))
 colnames(colon) <- 0:(ncol(colon)-1)
 # read in phenograph clusters and get into meta.data format
-phenograph.colon <- read.csv('pymethods_out/colon_clu.csv', header = F)
+phenograph.colon <- read.csv('outputs/colon_clu.csv', header = F)
 rownames(phenograph.colon) <- 0:(nrow(phenograph.colon)-1) # adjust row names to python indexing
 colnames(phenograph.colon) <- 'Phenograph.Clusters' # give it a descriptive header for Seurat
 phenograph.colon$Phenograph.Clusters <- as.factor(phenograph.colon$Phenograph.Clusters) # make it a factor
@@ -41,7 +46,7 @@ rownames(retina) <- make.names(retina$gene, unique = T)
 retina <- select(retina, -c(gene, chr, pos))
 colnames(retina) <- 1:ncol(retina)
 # read in phenograph clusters and get into meta.data format
-phenograph.retina <- read.csv('pymethods_out/retina_clu.csv', header = F)
+phenograph.retina <- read.csv('outputs/retina_clu.csv', header = F)
 colnames(phenograph.retina) <- 'Phenograph.Clusters' # give it a descriptive header for Seurat
 phenograph.retina$Phenograph.Clusters <- as.factor(phenograph.retina$Phenograph.Clusters) # make it a factor
 

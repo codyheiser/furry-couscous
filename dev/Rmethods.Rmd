@@ -28,10 +28,10 @@ Read in feature-selected datasets for testing; both are in cell-by-genes format 
 ```{r}
 # continuous data - GEO accession # GSM2743164
 colon <- read.csv('../inputs/GSM2743164_rep1_colon_rnaseq.processed.tsv', sep='\t', header = T, row.names = 1)
-colon.clu <- read.csv('pymethods_out/colon_clu.csv', header = F)
+colon.clu <- read.csv('outputs/colon_clu.csv', header = F)
 # discrete data - GEO accession # GSM1626793
 retina <- read.csv('../inputs/GSM1626793_P14Retina_1.processed.tsv', sep='\t', header = T, row.names = 1)
-retina.clu <- read.csv('pymethods_out/retina_clu.csv', header = F)
+retina.clu <- read.csv('outputs/retina_clu.csv', header = F)
 ```
 
 ***
@@ -77,11 +77,11 @@ plot.DR(data.frame(retina_SIMLR$ydata), colorby = retina_SIMLR$y$cluster, name='
 
 Finally write outputs for 10-D latent space and 2D projections from SIMLR
 ```{r}
-write.csv(colon_SIMLR$F, file = 'Rmethods_out/colon_SIMLR_F.csv', row.names = F)
-write.csv(colon_SIMLR$ydata, file = 'Rmethods_out/colon_SIMLR_ydata.csv', row.names = F)
+write.csv(colon_SIMLR$F, file = 'outputs/colon_SIMLR_F.csv', row.names = F)
+write.csv(colon_SIMLR$ydata, file = 'outputs/colon_SIMLR_ydata.csv', row.names = F)
 
-write.csv(retina_SIMLR$F, file = 'Rmethods_out/retina_SIMLR_F.csv', row.names = F)
-write.csv(retina_SIMLR$ydata, file = 'Rmethods_out/retina_SIMLR_ydata.csv', row.names = F)
+write.csv(retina_SIMLR$F, file = 'outputs/retina_SIMLR_F.csv', row.names = F)
+write.csv(retina_SIMLR$ydata, file = 'outputs/retina_SIMLR_ydata.csv', row.names = F)
 ```
 
 ***
@@ -116,9 +116,9 @@ plot.DR(data.frame(retina_zinbwave@reducedDims$zinbwave), colorby = retina.clu$V
 
 Output ZINB-WaVE results to .csv files
 ```{r}
-write.csv(data.frame(colon_zinbwave@reducedDims$zinbwave), file = 'Rmethods_out/colon_ZINB-WAVE.csv', row.names = F) # colon data
+write.csv(data.frame(colon_zinbwave@reducedDims$zinbwave), file = 'outputs/colon_ZINB-WAVE.csv', row.names = F) # colon data
 
-write.csv(data.frame(retina_zinbwave@reducedDims$zinbwave), file = 'Rmethods_out/retina_ZINB-WAVE.csv', row.names = F) # retina data
+write.csv(data.frame(retina_zinbwave@reducedDims$zinbwave), file = 'outputs/retina_ZINB-WAVE.csv', row.names = F) # retina data
 ```
 
 ***
@@ -143,7 +143,7 @@ plot.DR(retina_glmpca$factors, colorby = retina.clu$V1, name='GLM-PCA')
 
 Output GLM-PCA results to .csv files
 ```{r}
-write.csv(colon_glmpca$factors, file = 'Rmethods_out/colon_GLM-PCA.csv', row.names = F) # colon data
+write.csv(colon_glmpca$factors, file = 'outputs/colon_GLM-PCA.csv', row.names = F) # colon data
 
-write.csv(retina_glmpca$factors, file = 'Rmethods_out/retina_GLM-PCA.csv', row.names = F) # retina data
+write.csv(retina_glmpca$factors, file = 'outputs/retina_GLM-PCA.csv', row.names = F) # retina data
 ```
