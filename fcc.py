@@ -261,6 +261,51 @@ class couscous():
         self.clu['UMAP'] = Cluster(self.data['UMAP'].astype('double'), autoplot=False) # perform DPC on UMAP results
 
 
+    def silhouette_score(self, data_type):
+        '''
+        calculate silhouette score of clustered results
+            data_type = one of ['PCA', 't-SNE', 'UMAP', 'slide-seq'] describing space to evaluate clustering of
+        '''
+        assert hasattr(self.clu[data_type], 'membership'), 'Clustering not yet determined. Assign clusters with self.clu.assign().\n'
+        return silhouette_score(self.data[data_type], self.clu[data_type].membership) # calculate silhouette score
+
+
+    def cluster_counts(self, data_type):
+        '''
+        print number of cells in each cluster
+            data_type = one of ['PCA', 't-SNE', 'UMAP', 'slide-seq'] describing space to evaluate clustering of
+        '''
+        assert hasattr(self.clu[data_type], 'membership'), 'Clustering not yet determined. Assign clusters with self.clu.assign().\n'
+        IDs, counts = np.unique(self.clu[data_type].membership, return_counts=True)
+        for ID, count in zip(IDs, counts):
+            print('{} cells in cluster {} ({} %)\n'.format(count, ID, np.round(count/counts.sum()*100,3)))
+
+
+    def plot_clusters(self, data_type):
+        '''
+        visualize density peak clustering
+            data_type = one of ['PCA', 't-SNE', 'UMAP', 'slide-seq'] describing space to plot
+        '''
+        assert hasattr(self.clu[data_type], 'clusters'), 'Clustering not yet determined. Assign clusters with self.clu.assign().\n'
+        fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+        ax[0].scatter(self.data[data_type][:, 0], self.data[data_type][:, 1], s=75, alpha=0.7)
+        ax[0].scatter(self.data[data_type][self.clu[data_type].clusters, 0], self.data[data_type][self.clu[data_type].clusters, 1], s=90, c="red")
+        ax[1].scatter(self.data[data_type][:, 0], self.data[data_type][:, 1], s=75, alpha=0.7, c=self.clu[data_type].density)
+        ax[2].scatter(self.data[data_type][:, 0], self.data[data_type][:, 1], s=75, alpha=0.7, c=self.clu[data_type].membership, cmap=plt.cm.plasma)
+        IDs, counts = np.unique(self.clu[data_type].membership, return_counts=True) # get cluster counts and IDs
+        bbox_props = dict(boxstyle="round", fc="w", ec="0.5", alpha=0.9) # set up annotate box
+        # add percentages of each cluster to plot
+        for ID, count, x, y in zip(IDs, counts, self.data[data_type][self.clu[data_type].clusters, 0], self.data[data_type][self.clu[data_type].clusters, 1]):
+            ax[2].annotate('{} %'.format(np.round(count/counts.sum()*100,2)), xy=(x, y), ha="center", va="center", size=12, bbox=bbox_props)
+
+        for _ax in ax:
+            _ax.set_aspect('equal')
+            _ax.tick_params(labelbottom=False, labelleft=False)
+
+        sns.despine(left=True, bottom=True)
+        fig.tight_layout()
+
+
     def plot(self, data_type, color=None, save_to=None, figsize=(5,5)):
         '''
         standard plot of first 2 dimensions of latent space
@@ -358,7 +403,7 @@ class pita(couscous):
         self.data['slide-seq'] = self.data['slide-seq'].drop(self.data['slide-seq'].index.difference(self.data[data_type].index))
 
 
-    def snippet(self, xmin, xmax, ymin, ymax):
+    def snippet(self, xmin, xmax, ymin, ymax): # TODO: make this a classmethod or extensible to all DRs of pita
         '''
         take snippet of image and make new pita object
         '''
