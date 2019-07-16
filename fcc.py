@@ -56,7 +56,7 @@ class couscous():
 
         self.clu = {} # initiate dictionary of clustering results
         if data_type is not 'counts':
-            self.clu[data_type] = Cluster(self.data[data_type], autoplot=False) # get density-peak cluster information for results to use for plotting
+            self.clu[data_type] = Cluster(np.ascontiguousarray(self.data[data_type]), autoplot=False) # get density-peak cluster information for results to use for plotting
 
         if barcodes is not None: # if barcodes df provided, merge with data
             data_coded = data.merge(barcodes, left_index=True, right_index=True, how='left')
@@ -344,6 +344,58 @@ class couscous():
             plt.show()
         else:
             plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
+
+        plt.close()
+
+
+    def plot_barcodes(self, data_type, ranks='all', save_to=None, figsize=(5,5)):
+        '''
+        standard plot of first 2 dimensions of latent space, colored by barcodes
+            data_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to plot
+            ranks = which barcodes to include as list of indices or strings with barcode IDs
+            save_to = path to .png file to save plot to
+            figsize = size in inches of output figure
+        '''
+        assert self.barcodes is not None, 'Barcodes not assigned.\n'
+
+        plotter = np.ascontiguousarray(self.data[data_type]) # coerce data to np array for plotting
+
+        fig, ax = plt.subplots(1, figsize=figsize)
+
+        if ranks == 'all':
+            sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=None, edgecolor='none', palette='plasma')
+
+        else:
+            ints = [x for x in ranks if type(x)==int] # pull out rank values
+            IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
+            ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
+            ranks_codes = self.barcodes[self.barcodes.isin(list(ranks_i) + IDs)] # subset barcodes series
+            ranks_results = plotter[self.barcodes.isin(list(ranks_i) + IDs)] # subset results array
+            sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.1, color='gray', legend=None, edgecolor='none')
+            sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=75, alpha=0.7, legend=False, hue=ranks_codes, edgecolor='none', palette='plasma')
+
+        if data_type == 'PCA':
+            dim_name = 'PC'
+
+        else:
+            dim_name = data_type
+
+        plt.xlabel('{} 1'.format(dim_name), fontsize=14)
+        ax.xaxis.set_label_coords(0.2, -0.025)
+        plt.ylabel('{} 2'.format(dim_name), fontsize=14)
+        ax.yaxis.set_label_coords(-0.025, 0.2)
+
+        plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+        plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+
+        plt.tick_params(labelbottom=False, labelleft=False)
+        sns.despine(left=True, bottom=True)
+        plt.tight_layout()
+
+        if save_to is None:
+            plt.show()
+        else:
+            plt.savefig(fname=save_to, transparent=True, bbox_inches='tight')
 
         plt.close()
 
