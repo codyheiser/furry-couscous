@@ -5,8 +5,6 @@
 
 # packages for reading in data files
 import os
-import zipfile
-import gzip
 # basics
 import numpy as np
 import pandas as pd
@@ -24,6 +22,43 @@ from umap import UMAP						# UMAP
 import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns; sns.set(style = 'white')
+
+
+
+def threshold(mat, thresh=0.5, dir='above'):
+    '''replace all values in a matrix above or below a given threshold with np.nan'''
+    a = np.ma.array(mat, copy=True)
+    mask=np.zeros(a.shape, dtype=bool)
+    if dir=='above':
+        mask |= (a > thresh).filled(False)
+
+    elif dir=='below':
+        mask |= (a < thresh).filled(False)
+
+    else:
+        raise ValueError("Choose 'above' or 'below' for threshold direction (dir)")
+
+    a[~mask] = np.nan
+    return a
+
+
+def bin_threshold(mat, threshmin=None, threshmax=0.5):
+    '''
+    generate binary segmentation from probabilities
+        thresmax = value on [0,1] to assign binary IDs from probabilities. values higher than threshmax -> 1.
+            values lower than thresmax -> 0.
+    '''
+    a = np.ma.array(mat, copy=True)
+    mask = np.zeros(a.shape, dtype=bool)
+    if threshmin is not None:
+        mask |= (a < threshmin).filled(False)
+
+    if threshmax is not None:
+        mask |= (a > threshmax).filled(False)
+
+    a[mask] = 1
+    a[~mask] = 0
+    return a
 
 
 
@@ -476,17 +511,34 @@ class pita(couscous):
         ymax = np.ceil(self.data['slide-seq']['ycoord'].max())
 
         # define grid for pixel space
-        grid_x, grid_y = np.mgrid[xmin:xmax, ymin:ymax]
+        self.grid_x, self.grid_y = np.mgrid[xmin:xmax, ymin:ymax]
 
         # map beads to pixel grid
-        self.pixel_map = sc.interpolate.griddata(self.data['slide-seq'].values, self.data['slide-seq'].index, (grid_x, grid_y), method='nearest')
+        self.pixel_map = sc.interpolate.griddata(self.data['slide-seq'].values, self.data['slide-seq'].index, (self.grid_x, self.grid_y), method='nearest')
 
 
-    def assemble_pita(self, data_type, feature, plot_out=True, **kwargs):
+    def trim_pixels(self, threshold=100):
+        '''
+        trim_pixels
+        '''
+        tree = sc.spatial.cKDTree(self.data['slide-seq'].values)
+        xi = sc.interpolate.interpnd._ndim_coords_from_arrays((self.grid_x, self.grid_y), ndim=self.data['slide-seq'].shape[1])
+        dists, indices = tree.query(xi)
+
+        self.show_pita(assembled=dists, figsize=(4,4))
+        #self.show_pita(assembled=threshold(dists, thresh=threshold, dir='above'), figsize=(4,4))
+        self.show_pita(assembled=bin_threshold(dists, threshmax=threshold), figsize=(4,4))
+
+        self.pixel_map_trim = np.copy(self.pixel_map)
+        self.pixel_map_trim[dists > threshold] = np.nan
+
+
+    def assemble_pita(self, data_type, feature, trimmed=True, plot_out=True, **kwargs):
         '''
         cast feature into pixel space to construct gene expression image
             data_type = one of ['counts','PCA','t-SNE','UMAP'] describing data to pull features from
             feature = name or index of feature to cast onto bead image
+            trimmed = show pixel map output from trim_pixels(), or uncropped map?
             plot_out = show resulting image?
             **kwargs = arguments to pass to show_pita() function
         '''
@@ -496,7 +548,12 @@ class pita(couscous):
         else:
             mapper = self.data[data_type]
 
-        assembled = np.array([mapper[feature].reindex(index=self.pixel_map[x], copy=True) for x in range(len(self.pixel_map))])
+        if trimmed:
+            assert self.pixel_map_trim is not None, 'Pixel map not trimmed. Run self.trim_pixels(), or set trimmed=False to generate image.\n'
+            assembled = np.array([mapper[feature].reindex(index=self.pixel_map_trim[x], copy=True) for x in range(len(self.pixel_map_trim))])
+
+        else:
+            assembled = np.array([mapper[feature].reindex(index=self.pixel_map[x], copy=True) for x in range(len(self.pixel_map))])
 
         if plot_out:
             self.show_pita(assembled, **kwargs)
