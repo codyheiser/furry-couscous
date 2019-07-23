@@ -129,7 +129,7 @@ class couscous():
             data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to calculate distances in
             **kwargs = keyword arguments to pass to distance_matrix() function
         '''
-        return kneighbors_graph(self.distance_matrix(**kwargs), k, mode='connectivity', include_self=False).toarray()
+        return kneighbors_graph(self.distance_matrix(data_type=data_type, **kwargs), k, mode='connectivity', include_self=False).toarray()
 
 
     def barcode_counts(self, IDs='all'):
