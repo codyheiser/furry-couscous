@@ -1,5 +1,5 @@
 ### furry-couscous
-Tools for manipulation and analysis of single-cell and spatial transcriptomic data.
+Tools for manipulation and analysis of single-cell and spatial transcriptomic data
 
 ---
 #### Required Python Dependencies
