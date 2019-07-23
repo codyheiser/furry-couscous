@@ -5,8 +5,6 @@
 
 # packages for reading in data files
 import os
-import zipfile
-import gzip
 # basics
 import numpy as np
 import pandas as pd
@@ -16,6 +14,7 @@ from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA			# PCA
 from sklearn.manifold import TSNE				# t-SNE
 from sklearn.neighbors import kneighbors_graph	# K-nearest neighbors graph
+from sklearn.metrics import silhouette_score	# silhouette score
 # density peak clustering
 from pydpc import Cluster						# density-peak clustering
 # other DR methods
@@ -24,6 +23,43 @@ from umap import UMAP						# UMAP
 import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns; sns.set(style = 'white')
+
+
+
+def threshold(mat, thresh=0.5, dir='above'):
+    '''replace all values in a matrix above or below a given threshold with np.nan'''
+    a = np.ma.array(mat, copy=True)
+    mask=np.zeros(a.shape, dtype=bool)
+    if dir=='above':
+        mask |= (a > thresh).filled(False)
+
+    elif dir=='below':
+        mask |= (a < thresh).filled(False)
+
+    else:
+        raise ValueError("Choose 'above' or 'below' for threshold direction (dir)")
+
+    a[~mask] = np.nan
+    return a
+
+
+def bin_threshold(mat, threshmin=None, threshmax=0.5):
+    '''
+    generate binary segmentation from probabilities
+        thresmax = value on [0,1] to assign binary IDs from probabilities. values higher than threshmax -> 1.
+            values lower than thresmax -> 0.
+    '''
+    a = np.ma.array(mat, copy=True)
+    mask = np.zeros(a.shape, dtype=bool)
+    if threshmin is not None:
+        mask |= (a < threshmin).filled(False)
+
+    if threshmax is not None:
+        mask |= (a > threshmax).filled(False)
+
+    a[mask] = 1
+    a[~mask] = 0
+    return a
 
 
 
@@ -306,6 +342,26 @@ class couscous():
         fig.tight_layout()
 
 
+    def silhouette_score(self, data_type):
+        '''
+        calculate silhouette score of clustered results
+            data_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to calculate silhouette score of clustering
+        '''
+        assert hasattr(self.clu[data_type], 'membership'), 'Clustering not yet determined. Assign clusters with self.clu[data_type].assign().\n'
+        return silhouette_score(self.data[data_type], self.clu[data_type].membership) # calculate silhouette score
+
+
+    def cluster_counts(self, data_type):
+        '''
+        print number of cells in each cluster
+            data_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to calculate clustering stats
+        '''
+        assert hasattr(self.clu[data_type], 'membership'), 'Clustering not yet determined. Assign clusters with self.clu[data_type].assign().\n'
+        IDs, counts = np.unique(self.clu[data_type].membership, return_counts=True)
+        for ID, count in zip(IDs, counts):
+            print('{} cells in cluster {} ({} %)\n'.format(count, ID, np.round(count/counts.sum()*100,3)))
+
+
     def plot(self, data_type, color=None, save_to=None, figsize=(5,5)):
         '''
         standard plot of first 2 dimensions of latent space
@@ -425,6 +481,107 @@ class couscous():
         return cls(data=data, data_type=data_type, labels=labels, cells_axis=cells_axis, barcodes=barcodes)
 
 
+    @classmethod
+    def nvr_select(cls, counts_obj, parse_noise=True, data_type='counts', **kwargs):
+        '''
+        use neighborhood variance ratio (NVR) to feature-select RNA_counts object
+        return RNA_counts object with reduced data.
+            counts_obj = RNA_counts object to use as template for new, feature-selected RNA_counts object
+            parse_noise = use pyNVR to get rid of noisy genes first?
+            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing data to feature-select
+            **kwargs = keyword arguments to pass to arcsinh_norm() function
+        '''
+        if parse_noise:
+            hqGenes = nvr.parseNoise(np.ascontiguousarray(counts_obj.data[data_type])) # identify non-noisy genes
+            selected_genes = nvr.select_genes(counts_obj.arcsinh_norm(data_type=data_type, **kwargs)[:,hqGenes]) # select features from arsinh-transformed, non-noisy data
+
+        else:
+            selected_genes = nvr.select_genes(counts_obj.arcsinh_norm(data_type=data_type, **kwargs)) # select features from arsinh-transformed, non-noisy data
+
+        if counts_obj.barcodes is not None:
+            codes = pd.DataFrame(counts_obj.barcodes)
+            codes['Cell Barcode'] = codes.index # make barcodes mergeable when calling cls()
+
+        else:
+            codes=None
+
+        print('\nSelected {} variable genes\n'.format(selected_genes.shape[0]))
+        return cls(counts_obj.data[data_type].iloc[:,selected_genes], data_type=data_type, labels=[counts_obj.cell_labels, counts_obj.feature_labels], barcodes=codes)
+
+
+    @classmethod
+    def var_select(cls, counts_obj, n_features, data_type='counts'):
+        '''
+        select n_features (genes) with highest variance across all cells in dataset
+        return RNA_counts object with reduced data.
+            counts_obj = RNA_counts object to use as template for new, feature-selected RNA_counts object
+            n_features = total number of features desired in resulting dataset
+            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing data to feature-select
+        '''
+        v = counts_obj.data[data_type].var(axis=0).nlargest(n_features).index # get top n variant gene IDs
+
+        if counts_obj.barcodes is not None:
+            codes = pd.DataFrame(counts_obj.barcodes)
+            codes['Cell Barcode'] = codes.index # make barcodes mergeable when calling cls()
+
+        else:
+            codes=None
+
+        return cls(counts_obj.data[data_type][v], data_type=data_type, labels=[counts_obj.cell_labels, counts_obj.feature_labels], barcodes=codes)
+
+
+    @classmethod
+    def downsample_rand(cls, counts_obj, n_cells, data_type='counts', seed=None):
+        '''
+        randomly downsample a dataframe of shape (n_cells, n_features) to n_cells and generate new counts object
+        return RNA_counts object with reduced data.
+            counts_obj = RNA_counts object to use as template for new, subsetted RNA_counts object
+            n_cells = total number of cells desired in downsampled RNA_counts object
+            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing data to downsample
+            seed = random number generator seed for reproducible results
+        '''
+        np.random.seed(seed) # set seed for reproducible sampling if desired
+        cells_out = np.random.choice(counts_obj.data[data_type].shape[0], n_cells, replace=False)
+
+        if counts_obj.barcodes is not None:
+            codes = pd.DataFrame(counts_obj.barcodes)
+            codes['Cell Barcode'] = codes.index # make barcodes mergeable when calling cls()
+
+        else:
+            codes=None
+
+        return cls(counts_obj.data[data_type].iloc[cells_out], labels=[counts_obj.cell_labels, counts_obj.feature_labels], barcodes=codes)
+
+
+    @classmethod
+    def downsample_proportional(cls, counts_obj, n_cells, data_type='counts', seed=None):
+        '''
+        downsample a dataframe of shape (n_cells, n_features) to total n_cells using cluster membership.
+        finds proportion of cells in each cluster (DR.clu.membership attribute) and maintains each percentage.
+        return RNA_counts object with reduced data.
+            counts_obj = RNA_counts object to use as template for new, subsetted RNA_counts object
+            n_cells = total number of cells desired in downsampled RNA_counts object
+            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing data to downsample
+            seed = random number generator seed for reproducible results
+        '''
+        np.random.seed(seed) # set seed for reproducible sampling if desired
+        IDs, clu_counts = np.unique(counts_obj.clu[data_type].membership, return_counts=True) # get cluster IDs and number of cells in each
+
+        cells_out = np.array([]) # initialize array of output cell indices
+        for ID, count in zip(IDs, clu_counts):
+            clu_num = int(count/clu_counts.sum()*n_cells) + 1 # number of cells to sample for given cluster
+            cells_out = np.append(cells_out, np.random.choice(np.where(counts_obj.clu[data_type].membership == ID)[0], clu_num, replace=False))
+
+        if counts_obj.barcodes is not None:
+            codes = pd.DataFrame(counts_obj.barcodes)
+            codes['Cell Barcode'] = codes.index # make barcodes mergeable when calling cls()
+
+        else:
+            codes=None
+
+        return cls(counts_obj.data[data_type].iloc[cells_out], labels=[counts_obj.cell_labels, counts_obj.feature_labels], barcodes=codes)
+
+
 
 class pita(couscous):
     '''
@@ -476,27 +633,81 @@ class pita(couscous):
         ymax = np.ceil(self.data['slide-seq']['ycoord'].max())
 
         # define grid for pixel space
-        grid_x, grid_y = np.mgrid[xmin:xmax, ymin:ymax]
+        self.grid_x, self.grid_y = np.mgrid[xmin:xmax, ymin:ymax]
 
         # map beads to pixel grid
-        self.pixel_map = sc.interpolate.griddata(self.data['slide-seq'].values, self.data['slide-seq'].index, (grid_x, grid_y), method='nearest')
+        self.pixel_map = sc.interpolate.griddata(self.data['slide-seq'].values, self.data['slide-seq'].index, (self.grid_x, self.grid_y), method='nearest')
 
 
-    def assemble_pita(self, data_type, feature, plot_out=True, **kwargs):
+    def trim_pixels(self, threshold=100):
+        '''
+        trim_pixels
+        '''
+        tree = sc.spatial.cKDTree(self.data['slide-seq'].values)
+        xi = sc.interpolate.interpnd._ndim_coords_from_arrays((self.grid_x, self.grid_y), ndim=self.data['slide-seq'].shape[1])
+        dists, indices = tree.query(xi)
+
+        self.show_pita(assembled=dists, figsize=(4,4))
+        #self.show_pita(assembled=threshold(dists, thresh=threshold, dir='above'), figsize=(4,4))
+        self.show_pita(assembled=bin_threshold(dists, threshmax=threshold), figsize=(4,4))
+
+        self.pixel_map_trim = np.copy(self.pixel_map)
+        self.pixel_map_trim[dists > threshold] = np.nan
+
+
+    def assemble_pita(self, data_type, features, transform=None, trimmed=True, plot_out=True, **kwargs):
         '''
         cast feature into pixel space to construct gene expression image
             data_type = one of ['counts','PCA','t-SNE','UMAP'] describing data to pull features from
-            feature = name or index of feature to cast onto bead image
+            features = list of names or indices of feature to cast onto bead image
+            transform = transform data before generating feature image. One of ['arcsinh','log2',None].
+            trimmed = show pixel map output from trim_pixels(), or uncropped map?
             plot_out = show resulting image?
             **kwargs = arguments to pass to show_pita() function
         '''
-        if data_type!='counts':
-            mapper = pd.DataFrame(self.data[data_type], index=self.data['counts'].index) # coerce to pandas df for reindexing
+        # transform data first, if necessary
+        if transform is None:
+            mapper = pd.DataFrame(self.data[data_type], index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+
+        if transform == 'arcsinh':
+            mapper = pd.DataFrame(self.arcsinh_norm(data_type=data_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+
+        elif transform == 'log2':
+            mapper = pd.DataFrame(self.log2_norm(data_type=data_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+
+        # determine which reference pixel map to use
+        if trimmed:
+            assert self.pixel_map_trim is not None, 'Pixel map not trimmed. Run self.trim_pixels(), or set trimmed=False to generate image.\n'
+            ref = self.pixel_map_trim
 
         else:
-            mapper = self.data[data_type]
+            ref = self.pixel_map
 
-        assembled = np.array([mapper[feature].reindex(index=self.pixel_map[x], copy=True) for x in range(len(self.pixel_map))])
+        # determine how to display results
+        # if user wants total of all features, sum them up
+        if features == 'total':
+            map_features = mapper.sum(axis=1)
+
+        # if 'features' is a string, treat it as regex value
+        elif isinstance(features, str):
+            map_features = mapper.loc[:,self.feature_IDs.str.contains(features)].sum(axis=1)
+
+        # if 'features' is an integer, treat it as column index
+        elif isinstance(features, int):
+            map_features = mapper.iloc[:,features]
+
+        # if 'features' is a list of strings, treat them as regex values and return sum of (normalized) expression
+        elif all(isinstance(elem, str) for elem in features):
+            map_features = mapper.loc[:,self.feature_IDs.str.contains('|'.join(features))].sum(axis=1)
+
+        # if 'features' is a list of integers, treat them as column indices and return sum of (normalized) expression
+        elif all(isinstance(elem, int) for elem in features):
+            map_features = mapper.iloc[:,features].sum(axis=1)
+
+        else:
+            raise ValueError('Please provide features as a list of strings or integers. e.g. [0,3,4], ["Vim","Aldoc","Ttr"].')
+
+        assembled = np.array([map_features.reindex(index=ref[x], copy=True) for x in range(len(ref))])
 
         if plot_out:
             self.show_pita(assembled, **kwargs)
