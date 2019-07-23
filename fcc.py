@@ -1,65 +1,23 @@
-# slide-seq fusion objects
+# scRNA-seq analysis and slide-seq fusion objects
 
 # @author: C Heiser
 # July 2019
 
+
+# basic utilities and plotting
+from fcc_utils import *
 # packages for reading in data files
 import os
-# basics
-import numpy as np
-import pandas as pd
-import scipy as sc
 # scikit packages
-from sklearn.preprocessing import normalize
-from sklearn.decomposition import PCA			# PCA
-from sklearn.manifold import TSNE				# t-SNE
-from sklearn.neighbors import kneighbors_graph	# K-nearest neighbors graph
-from sklearn.metrics import silhouette_score	# silhouette score
+from sklearn.preprocessing import normalize     # matrix normalization
+from sklearn.decomposition import PCA           # PCA
+from sklearn.manifold import TSNE               # t-SNE
+from sklearn.neighbors import kneighbors_graph  # K-nearest neighbors graph
+from sklearn.metrics import silhouette_score    # silhouette score
 # density peak clustering
-from pydpc import Cluster						# density-peak clustering
+from pydpc import Cluster                       # density-peak clustering
 # other DR methods
-from umap import UMAP						# UMAP
-# plotting packages
-import matplotlib
-import matplotlib.pyplot as plt
-import seaborn as sns; sns.set(style = 'white')
-
-
-
-def threshold(mat, thresh=0.5, dir='above'):
-    '''replace all values in a matrix above or below a given threshold with np.nan'''
-    a = np.ma.array(mat, copy=True)
-    mask=np.zeros(a.shape, dtype=bool)
-    if dir=='above':
-        mask |= (a > thresh).filled(False)
-
-    elif dir=='below':
-        mask |= (a < thresh).filled(False)
-
-    else:
-        raise ValueError("Choose 'above' or 'below' for threshold direction (dir)")
-
-    a[~mask] = np.nan
-    return a
-
-
-def bin_threshold(mat, threshmin=None, threshmax=0.5):
-    '''
-    generate binary segmentation from probabilities
-        thresmax = value on [0,1] to assign binary IDs from probabilities. values higher than threshmax -> 1.
-            values lower than thresmax -> 0.
-    '''
-    a = np.ma.array(mat, copy=True)
-    mask = np.zeros(a.shape, dtype=bool)
-    if threshmin is not None:
-        mask |= (a < threshmin).filled(False)
-
-    if threshmax is not None:
-        mask |= (a > threshmax).filled(False)
-
-    a[mask] = 1
-    a[~mask] = 0
-    return a
+from umap import UMAP                           # UMAP
 
 
 
@@ -136,6 +94,32 @@ class couscous():
         ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
         ranks_counts = transformed[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed data
         return sc.spatial.distance_matrix(ranks_counts, ranks_counts)
+
+
+    def barcode_distance_matrix(self, ranks, data_type='counts', transform=None, **kwargs):
+        '''
+        calculate Euclidean distances between cells in two barcode groups within a dataset
+            ranks = which TWO barcodes to calculate distances between. List of ranks of most abundant barcodes (integers, i.e. [1,2] for top 2 barcodes),
+                or names of barcode IDs (strings, i.e. ['0','2'] for barcodes with numbered IDs)
+            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to calculate distances in
+            transform = how to normalize and transform data prior to calculating distances (None, "arcsinh", or "log2")
+            **kwargs = keyword arguments to pass to normalization functions
+        '''
+        assert self.barcodes is not None, 'Barcodes not assigned.\n'
+
+        # transform data first, if necessary
+        if transform is None:
+            transformed = np.ascontiguousarray(self.data[data_type])
+
+        if transform == 'arcsinh':
+            transformed = self.arcsinh_norm(data_type=data_type, **kwargs)
+
+        elif transform == 'log2':
+            transformed = self.log2_norm(data_type=data_type, **kwargs)
+
+        ranks_0 = transformed[np.array(self.barcodes.isin(list(ranks[0])))] # subset transformed counts array to first barcode ID
+        ranks_1 = transformed[np.array(self.barcodes.isin(list(ranks[1])))] # subset transformed counts array to second barcode ID
+        return sc.spatial.distance_matrix(ranks_0, ranks_1)
 
 
     def knn_graph(self, k, data_type='counts', **kwargs):
@@ -351,17 +335,6 @@ class couscous():
         return silhouette_score(self.data[data_type], self.clu[data_type].membership) # calculate silhouette score
 
 
-    def cluster_counts(self, data_type):
-        '''
-        print number of cells in each cluster
-            data_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to calculate clustering stats
-        '''
-        assert hasattr(self.clu[data_type], 'membership'), 'Clustering not yet determined. Assign clusters with self.clu[data_type].assign().\n'
-        IDs, counts = np.unique(self.clu[data_type].membership, return_counts=True)
-        for ID, count in zip(IDs, counts):
-            print('{} cells in cluster {} ({} %)\n'.format(count, ID, np.round(count/counts.sum()*100,3)))
-
-
     def plot(self, data_type, color=None, save_to=None, figsize=(5,5)):
         '''
         standard plot of first 2 dimensions of latent space
@@ -456,6 +429,36 @@ class couscous():
         plt.close()
 
 
+    def plot_PCA(self, color=None, save_to=None, figsize=(10,5)):
+        '''PCA plot including variance contribution per component'''
+        assert self.data['PCA'] is not None, 'PCA not performed.\n'
+
+        if color is None:
+            color = self.clu['PCA'].density
+        plt.figure(figsize=figsize)
+
+        plt.subplot(121)
+        sns.scatterplot(x=self.data['PCA'][:,0], y=self.data['PCA'][:,1], s=75, alpha=0.7, hue=color, legend=None, edgecolor='none')
+        plt.tick_params(labelbottom=False, labelleft=False)
+        plt.xlabel('PC 1', fontsize=14)
+        plt.ylabel('PC 2', fontsize=14)
+
+        plt.subplot(122)
+        plt.plot(np.cumsum(np.round(self.PCA_fit.explained_variance_ratio_, decimals=3)*100))
+        plt.tick_params(labelsize=12)
+        plt.ylabel('% Variance Explained', fontsize=14)
+        plt.xlabel('# of Features', fontsize=14)
+        sns.despine()
+
+        plt.tight_layout()
+        if save_to is None:
+            plt.show()
+        else:
+            plt.savefig(fname=save_to, transparent=True, bbox_inches='tight')
+
+        plt.close()
+
+
     @classmethod
     def from_file(cls, datafile, data_type='counts', labels=[0,0], cells_axis=0, barcodefile=None):
         '''
@@ -479,6 +482,65 @@ class couscous():
             barcodes = None
 
         return cls(data=data, data_type=data_type, labels=labels, cells_axis=cells_axis, barcodes=barcodes)
+
+
+    @classmethod
+    def drop_set(cls, counts_obj, drop_index, axis, data_type='counts', num=False):
+        '''
+        drop cells (axis 0) or genes (axis 1) with a pd.Index list. return RNA_counts object with reduced data.
+            counts_obj = RNA_counts object to use as template for new, subsetted RNA_counts object.
+            drop_index = list of indices to drop
+            axis = 0 to subset cells, 1 to subset genes
+            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing data to subset
+            num = numerical index (iloc) or index by labels (loc)?
+        '''
+        if counts_obj.barcodes is not None:
+            codes = pd.DataFrame(counts_obj.barcodes)
+            codes['Cell Barcode'] = codes.index # make barcodes mergeable when calling cls()
+
+        else:
+            codes=None
+
+        if not num:
+            return cls(counts_obj.data[data_type].drop(drop_index, axis=axis), data_type=data_type, labels=[counts_obj.cell_labels, counts_obj.feature_labels], barcodes=codes)
+
+        elif axis==1:
+            return cls(counts_obj.data[data_type].drop(counts_obj.data.columns[drop_index], axis=axis), data_type=data_type, labels=[counts_obj.cell_labels, counts_obj.feature_labels], barcodes=codes)
+
+        elif axis==0:
+            return cls(counts_obj.data[data_type].drop(counts_obj.data.index[drop_index], axis=axis), data_type=data_type, labels=[counts_obj.cell_labels, counts_obj.feature_labels], barcodes=codes)
+
+
+    @classmethod
+    def keep_set(cls, counts_obj, keep_index, axis, data_type='counts', num=False):
+        '''
+        keep cells (axis 0) or genes (axis 1) with a pd.Index list. return RNA_counts object with reduced data.
+            counts_obj = RNA_counts object to use as template for new, subsetted RNA_counts object.
+            keep_index = list of indices to keep
+            axis = 0 to subset cells, 1 to subset genes
+            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing data to subset
+            num = numerical index (iloc) or index by labels (loc)?
+        '''
+        if counts_obj.barcodes is not None:
+            codes = pd.DataFrame(counts_obj.barcodes)
+            codes['Cell Barcode'] = codes.index # make barcodes mergeable when calling cls()
+
+        else:
+            codes=None
+
+        if not num:
+            if axis==0:
+                return cls(counts_obj.data[data_type].loc[keep_index,:], data_type=data_type, labels=[counts_obj.cell_labels, counts_obj.feature_labels], barcodes=codes)
+
+            elif axis==1:
+                return cls(counts_obj.data[data_type].loc[:,keep_index], data_type=data_type, labels=[counts_obj.cell_labels, counts_obj.feature_labels], barcodes=codes)
+
+        else:
+            if axis==0:
+                return cls(counts_obj.data[data_type].iloc[keep_index,:], data_type=data_type, labels=[counts_obj.cell_labels, counts_obj.feature_labels], barcodes=codes)
+
+            elif axis==1:
+                return cls(counts_obj.data[data_type].iloc[:,keep_index], data_type=data_type, labels=[counts_obj.cell_labels, counts_obj.feature_labels], barcodes=codes)
 
 
     @classmethod
