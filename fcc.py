@@ -335,17 +335,54 @@ class couscous():
         return silhouette_score(self.data[data_type], self.clu[data_type].membership) # calculate silhouette score
 
 
-    def plot(self, data_type, color=None, save_to=None, figsize=(5,5)):
+    def plot(self, data_type, color=None, feature_type='counts', features='total', transform='arcsinh', save_to=None, figsize=(5,5), **kwargs):
         '''
         standard plot of first 2 dimensions of latent space
             data_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to plot
             color = vector of values to color points by. Default coloring is by point density.
+            feature_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to overlay feature intensities from. Default 'counts' to plot gene expression.
+            features = list of names or indices of features to cast onto plot. Default 'total' to sum all features in feature_type space for each cell.
+            transform = transform data before generating feature image. One of ['arcsinh','log2',None].
             save_to = path to .png file to save plot to
             figsize = size in inches of output figure
+            **kwargs = additional arguments to pass to arcsinh_norm or log2_norm methods.
         '''
-        if color is None:
+        # determine how to display results
+        # if no color vector or list of features is given, use point density
+        if color is None and features is None:
             color = self.clu[data_type].density
+            
+        elif color is None:
+            # transform data first, if necessary
+            if transform is None:
+                mapper = pd.DataFrame(self.data[feature_type], index=self.data['counts'].index) # coerce to pd.DF with bead ID index
 
+            elif transform == 'arcsinh':
+                mapper = pd.DataFrame(self.arcsinh_norm(data_type=feature_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+
+            elif transform == 'log2':
+                mapper = pd.DataFrame(self.log2_norm(data_type=feature_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+
+            # if user wants total of all features (UMI count), sum them up
+            if features == 'total':
+                color = mapper.sum(axis=1)
+
+            # if 'features' is a string, treat it as regex value
+            elif isinstance(features, str):
+                color = mapper.loc[:,self.feature_IDs.str.contains(features)].sum(axis=1)
+
+            # if 'features' is an integer, treat it as column index
+            elif isinstance(features, int):
+                color = mapper.iloc[:,features]
+
+            # if 'features' is a list of strings, treat them as regex values and return sum of (normalized) expression
+            elif all(isinstance(elem, str) for elem in features):
+                color = mapper.loc[:,self.feature_IDs.str.contains('|'.join(features))].sum(axis=1)
+
+            # if 'features' is a list of integers, treat them as column indices and return sum of (normalized) expression
+            elif all(isinstance(elem, int) for elem in features):
+                color = mapper.iloc[:,features].sum(axis=1)
+            
         plotter = np.ascontiguousarray(self.data[data_type]) # coerce data to np array for plotting
 
         fig, ax = plt.subplots(1, figsize=figsize)
