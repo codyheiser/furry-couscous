@@ -511,6 +511,10 @@ class couscous():
 
         elif '.txt' or '.tsv' in datafile:
             data = pd.read_csv(datafile, header=labels[1], index_col=labels[0], sep='\t')
+            
+        if cells_axis==1:
+            data = data.T # transpose matrix if needed
+            labels = labels[::-1] # return labels in reverse order to capture cell and feature IDs properly
 
         if barcodefile: # if barcodes provided, read in file
             barcodes = pd.read_csv(barcodefile, index_col=None, header=None, names=['Barcode'])
@@ -518,7 +522,7 @@ class couscous():
         else:
             barcodes = None
 
-        return cls(data=data, data_type=data_type, labels=labels, cells_axis=cells_axis, barcodes=barcodes)
+        return cls(data=data, data_type=data_type, labels=labels, barcodes=barcodes)
 
 
     @classmethod
