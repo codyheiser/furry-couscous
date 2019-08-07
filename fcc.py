@@ -1,7 +1,7 @@
 # scRNA-seq analysis and slide-seq fusion objects
 
 # @author: C Heiser
-# July 2019
+# August 2019
 
 
 # basic utilities and plotting
@@ -335,7 +335,7 @@ class couscous():
         return silhouette_score(self.data[data_type], self.clu[data_type].membership) # calculate silhouette score
 
 
-    def plot(self, data_type, color=None, feature_type='counts', features='total', transform='arcsinh', save_to=None, figsize=(5,5), **kwargs):
+    def plot(self, data_type, color=None, feature_type='counts', features='total', transform='arcsinh', legend=None, save_to=None, figsize=(5,5), **kwargs):
         '''
         standard plot of first 2 dimensions of latent space
             data_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to plot
@@ -343,6 +343,7 @@ class couscous():
             feature_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to overlay feature intensities from. Default 'counts' to plot gene expression.
             features = list of names or indices of features to cast onto plot. Default 'total' to sum all features in feature_type space for each cell.
             transform = transform data before generating feature image. One of ['arcsinh','log2',None].
+            legend = one of ['brief', 'full', None] describing what kind of legend to show
             save_to = path to .png file to save plot to
             figsize = size in inches of output figure
             **kwargs = additional arguments to pass to arcsinh_norm or log2_norm methods.
@@ -386,7 +387,7 @@ class couscous():
         plotter = np.ascontiguousarray(self.data[data_type]) # coerce data to np array for plotting
 
         fig, ax = plt.subplots(1, figsize=figsize)
-        sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.7, hue=color, legend=None, edgecolor='none')
+        sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.7, hue=color, legend=legend, edgecolor='none')
 
         if data_type == 'PCA':
             dim_name = 'PC'
@@ -404,6 +405,8 @@ class couscous():
 
         plt.tick_params(labelbottom=False, labelleft=False)
         sns.despine(left=True, bottom=True)
+        if legend is not None:
+            plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
         plt.tight_layout()
 
         if save_to is None:
@@ -414,11 +417,12 @@ class couscous():
         plt.close()
 
 
-    def plot_barcodes(self, data_type, ranks='all', save_to=None, figsize=(5,5)):
+    def plot_barcodes(self, data_type, ranks='all', legend=None, save_to=None, figsize=(5,5)):
         '''
         standard plot of first 2 dimensions of latent space, colored by barcodes
             data_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to plot
             ranks = which barcodes to include as list of indices or strings with barcode IDs
+            legend = one of ['brief', 'full', None] describing what kind of legend to show
             save_to = path to .png file to save plot to
             figsize = size in inches of output figure
         '''
@@ -429,7 +433,7 @@ class couscous():
         fig, ax = plt.subplots(1, figsize=figsize)
 
         if ranks == 'all':
-            sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=None, edgecolor='none', palette='plasma')
+            sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=legend, edgecolor='none', palette='plasma')
 
         else:
             ints = [x for x in ranks if type(x)==int] # pull out rank values
@@ -437,8 +441,8 @@ class couscous():
             ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
             ranks_codes = self.barcodes[self.barcodes.isin(list(ranks_i) + IDs)] # subset barcodes series
             ranks_results = plotter[self.barcodes.isin(list(ranks_i) + IDs)] # subset results array
-            sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.1, color='gray', legend=None, edgecolor='none')
-            sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=75, alpha=0.7, legend=False, hue=ranks_codes, edgecolor='none', palette='plasma')
+            sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.1, color='gray', legend=False, edgecolor='none')
+            sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=75, alpha=0.7, hue=ranks_codes, edgecolor='none', palette='plasma')
 
         if data_type == 'PCA':
             dim_name = 'PC'
@@ -456,6 +460,8 @@ class couscous():
 
         plt.tick_params(labelbottom=False, labelleft=False)
         sns.despine(left=True, bottom=True)
+        if legend is not None:
+            plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
         plt.tight_layout()
 
         if save_to is None:
