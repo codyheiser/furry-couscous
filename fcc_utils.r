@@ -47,7 +47,7 @@ plot.DR <- function(results, colorby='c', name=''){
 }
 
 
-seurat.pipe <- function(counts, n.pcs=100, k=30, tsne=T, umap=F, perplexity=30, seed=18){
+seurat.pipe <- function(counts, n.pcs=100, k=30, tsne=T, umap=F, perplexity=30, seed=18, ...){
   # normalize, feature select, scale, cluster, and reduce dimensionality via standard Seurat pipeline
   #   counts = Seurat object, or matrix of counts in cells x genes format with cell and gene labels as rownames and colnames, respectively
   #   n.pcs = number of PCs to calculate and use for downstream reductions
@@ -56,10 +56,11 @@ seurat.pipe <- function(counts, n.pcs=100, k=30, tsne=T, umap=F, perplexity=30, 
   #   umap = perform UMAP on PCs?
   #   perplexity = parameter for t-SNE and UMAP reductions
   #   seed = seed for random layout of t-SNE and UMAP for reproducible results
+  #   ... = options to pass to CreateSeuratObject()
   start.time <- Sys.time()
   
   if (class(counts)[1]!='Seurat'){
-    counts <- CreateSeuratObject(counts=counts)                                             # initialize Seurat object to get feature names for scaling
+    counts <- CreateSeuratObject(counts=counts, ...)                                        # initialize Seurat object to get feature names for scaling
   }
   
   obj <- counts %>%
