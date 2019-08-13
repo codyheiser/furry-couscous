@@ -49,7 +49,7 @@ plot.DR <- function(results, colorby='c', name=''){
 
 seurat.pipe <- function(counts, n.pcs=100, k=30, tsne=T, umap=F, perplexity=30, seed=18){
   # normalize, feature select, scale, cluster, and reduce dimensionality via standard Seurat pipeline
-  #   counts = matrix of counts in cells x genes format, with cell and gene labels as rownames and colnames, respectively
+  #   counts = Seurat object, or matrix of counts in cells x genes format with cell and gene labels as rownames and colnames, respectively
   #   n.pcs = number of PCs to calculate and use for downstream reductions
   #   k = nearest-neighbor value to use for Knn graph to seed Louvain clustering algorithm
   #   tsne = perform t-SNE on PCs?
@@ -58,11 +58,14 @@ seurat.pipe <- function(counts, n.pcs=100, k=30, tsne=T, umap=F, perplexity=30, 
   #   seed = seed for random layout of t-SNE and UMAP for reproducible results
   start.time <- Sys.time()
   
-  obj <- CreateSeuratObject(counts=counts)                                                  # initialize Seurat object to get feature names for scaling
-  obj <- obj %>%
+  if (class(counts)[1]!='Seurat'){
+    counts <- CreateSeuratObject(counts=counts)                                             # initialize Seurat object to get feature names for scaling
+  }
+  
+  obj <- counts %>%
     NormalizeData() %>%                                                                     # normalize counts within each cell and log1p-transform
     FindVariableFeatures() %>%                                                              # feature selection using UMI binning
-    ScaleData(features = rownames(obj@assays$RNA@meta.features)) %>%                        # scale all features to prevent genes from taking over dataset
+    ScaleData(features = rownames(counts@assays$RNA@meta.features)) %>%                     # scale all features to prevent genes from taking over dataset
     RunPCA(npcs = n.pcs) %>%                                                                # run principal component analysis
     FindNeighbors(reduction = 'pca', dims = 1:n.pcs, k.param = k) %>%                       # build nn graph from PCs
     FindClusters(random.seed = seed)                                                        # perform Louvain clustering using nn graph
