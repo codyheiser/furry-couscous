@@ -6,3 +6,4 @@ result.dat
 .RHistory
 .nb.html
 *.pyc
+.vscode/
