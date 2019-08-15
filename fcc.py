@@ -326,15 +326,6 @@ class couscous():
         fig.tight_layout()
 
 
-    def silhouette_score(self, data_type):
-        '''
-        calculate silhouette score of clustered results
-            data_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to calculate silhouette score of clustering
-        '''
-        assert hasattr(self.clu[data_type], 'membership'), 'Clustering not yet determined. Assign clusters with self.clu[data_type].assign().\n'
-        return silhouette_score(self.data[data_type], self.clu[data_type].membership) # calculate silhouette score
-
-
     def plot(self, data_type, color=None, feature_type='counts', features='total', transform='arcsinh', legend=None, save_to=None, figsize=(5,5), **kwargs):
         '''
         standard plot of first 2 dimensions of latent space
@@ -764,10 +755,10 @@ class pita(couscous):
         self.pixel_map_trim[dists > threshold] = np.nan
 
 
-    def assemble_pita(self, data_type, features, transform=None, trimmed=True, plot_out=True, **kwargs):
+    def assemble_pita(self, feature_type, features, transform=None, trimmed=True, plot_out=True, **kwargs):
         '''
         cast feature into pixel space to construct gene expression image
-            data_type = one of ['counts','PCA','t-SNE','UMAP'] describing data to pull features from
+            feature_type = one of ['counts','PCA','t-SNE','UMAP'] describing data to pull features from
             features = list of names or indices of feature to cast onto bead image
             transform = transform data before generating feature image. One of ['arcsinh','log2',None].
             trimmed = show pixel map output from trim_pixels(), or uncropped map?
