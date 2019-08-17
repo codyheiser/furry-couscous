@@ -85,7 +85,137 @@ seurat.pipe <- function(counts, n.pcs=100, k=30, tsne=T, umap=F, perplexity=30, 
 }
 
 
-fcc_predictcelltype<-function(qdata, ref.expr, anntext="Query", corcutoff=0){
+fcc.corr.expr <- function(obj, ident, grouping.var, plot.out=T, n.genes.label=10){
+  # correlate average expression within an ident across condition (grouping.var) and return df
+  #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
+  #   ident = name of ident to correlate expression within
+  #   grouping.var = meta.data column header to group cells by - usually 'orig.ident' for integrated samples
+  #   plot.out = scatterplot correlation of expression?
+  #   n.genes.label = top n non-correlated genes to label on plot - default top 10
+  start.time <- Sys.time()
+  
+  s <- subset(obj, idents=ident)
+  Idents(s) <- grouping.var
+  group.names <- levels(Idents(s))
+  avg.expr <- log1p(AverageExpression(s)$RNA) %>%
+    rownames_to_column('gene') %>%
+    mutate(diff=eval(parse(text=paste0('abs(',group.names[1],'-',group.names[2],')')))) %>%
+    arrange(-diff)
+  
+  if(plot.out){
+    genes.to.label <- top_n(avg.expr, n.genes.label, wt=diff)$gene
+    plt.df <- avg.expr %>%
+      column_to_rownames('gene')
+    p1 <- ggplot(plt.df, aes(eval(parse(text=paste0(group.names[1]))), eval(parse(text=paste0(group.names[2]))))) +
+      geom_point() +
+      ggtitle(ident) +
+      labs(x=group.names[1], y=group.names[2]) +
+      plot.opts
+    p1 <- LabelPoints(plot=p1, points=genes.to.label, repel=T, xnudge = 0, ynudge = 0, color='blue')
+    plot(p1)
+  }
+  
+  print(Sys.time() - start.time)
+  return(avg.expr)
+}
+
+
+fcc.find.conserved.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cells.per.ident=150){
+  # ID conserved cell type markers in each cluster across condition (grouping.var) and return df
+  #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
+  #   grouping.var = meta.data column header to group cells by - usually 'orig.ident' for integrated samples
+  #   n.genes.per.group = top n genes to return per ident - default 10
+  #   max.cells.per.ident = downsample idents when testing to speed up processing time - set to Inf to deactivate downsampling
+  start.time <- Sys.time()
+  
+  markers <- NULL
+  for (id in levels(Idents(obj))) {
+    if (is_null(markers)) {
+      tryCatch(
+        {
+          markers <- FindConservedMarkers(comb.obj.p1, ident.1=id, grouping.var=grouping.var, max.cells.per.ident=max.cells.per.ident) %>% 
+            rownames_to_column('gene') %>% 
+            top_n(n.genes.per.ident, wt=minimump_p_val) %>% 
+            mutate(cluster=paste(id))
+        }, error=function(cond) {
+          message(paste0(cond,'\n'))
+        }
+      )
+    } else {
+      tryCatch(
+        {
+          markers <- rbind(markers, FindConservedMarkers(comb.obj.p1, ident.1=id, grouping.var=grouping.var, max.cells.per.ident=max.cells.per.ident) %>% 
+                             rownames_to_column('gene') %>% 
+                             top_n(n.genes.per.ident, wt=minimump_p_val) %>% 
+                             mutate(cluster=paste(id)))
+        }, error=function(cond) {
+          message(paste0(cond,'\n'))
+        }
+      )
+    }
+  }
+  
+  print(Sys.time() - start.time)
+  return(markers)
+}
+
+# TODO: Fix this!
+fcc.find.DE.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cells.per.ident=150){
+  # ID differentially-expressed cell type markers in each cluster across condition (grouping.var) and return df
+  #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
+  #   grouping.var = meta.data column header to group cells by - usually 'orig.ident' for integrated samples
+  #   n.genes.per.group = top n genes to return per ident - default 10
+  #   max.cells.per.ident = downsample idents when testing to speed up processing time - set to Inf to deactivate downsampling
+  start.time <- Sys.time()
+  
+  start.idents <- levels(Idents(obj))
+  conditions <- unique(eval(parse(text=paste0('obj$',grouping.var))))
+  
+  if (length(conditions)!=2){
+    print('Only capable of DE analysis of binary conditions')
+    return()
+  }
+  
+  obj$ident_condition <- paste(Idents(obj), eval(parse(text=paste0('obj$',grouping.var))), sep='_')
+  Idents(obj) <- 'ident_condition'
+  
+  markers <- NULL
+  
+  for (i in start.idents) {
+    print(paste0('Performing differential expression analysis between ', conditions[1], ' and ', conditions[2], ' for ', i))
+    if (is_null(markers)) {
+      tryCatch(
+        {
+          markers <- FindMarkers(obj, ident.1=paste(i, conditions[1], sep='_'), ident.2=paste(i, conditions[2], sep='_'), 
+                                 max.cells.per.ident=max.cells.per.ident) %>% 
+            rownames_to_column('gene') %>% 
+            top_n(n.genes.per.ident, wt=p_val_adj) %>% 
+            mutate(cluster=i)
+        }, error=function(cond) {
+          message(paste0(cond,'\n'))
+        }
+      )
+    } else {
+      tryCatch(
+        {
+          markers <- rbind(markers, FindMarkers(obj, ident.1=paste(i, conditions[1], sep='_'), ident.2=paste(i, conditions[2], sep='_'), 
+                                                max.cells.per.ident=max.cells.per.ident) %>% 
+                             rownames_to_column('gene') %>% 
+                             top_n(n.genes.per.ident, wt=p_val_adj) %>% 
+                             mutate(cluster=i))
+        }, error=function(cond) {
+          message(paste0(cond,'\n'))
+        }
+      )
+    }
+  }
+  
+  print(Sys.time() - start.time)
+  return(markers)
+}
+
+
+fcc.predictcelltype<-function(qdata, ref.expr, anntext="Query", corcutoff=0){
   # predict cell types based on expression correlation with reference database
   # adapted from scUnifrac (https://github.com/liuqivandy/scUnifrac)
   #   qdata = matrix of counts in cells x genes format, with cell and gene labels as rownames and colnames, respectively
