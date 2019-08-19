@@ -96,31 +96,97 @@ fcc.corr.expr <- function(obj, ident, grouping.var, plot.out=T, n.genes.label=10
   
   s <- subset(obj, idents=ident)
   Idents(s) <- grouping.var
-  group.names <- levels(Idents(s))
+  ident.names <- levels(Idents(s))
   avg.expr <- log1p(AverageExpression(s)$RNA) %>%
     rownames_to_column('gene') %>%
-    mutate(diff=eval(parse(text=paste0('abs(',group.names[1],'-',group.names[2],')')))) %>%
+    mutate(diff=eval(parse(text=paste0('abs(',ident.names[1],'-',ident.names[2],')')))) %>%
     arrange(-diff)
   
+  top.expr <- avg.expr %>%
+    top_n(n.genes.label, wt=diff)
+  
+  if(nrow(top.expr)==0){
+    print(Sys.time() - start.time)
+    stop(paste0('Ident ',ident,' absent in both groups'))
+  }
+  
   if(plot.out){
-    genes.to.label <- top_n(avg.expr, n.genes.label, wt=diff)$gene
+    cond1.genes <- (top.expr %>% dplyr::filter(eval(parse(text=paste0(ident.names[1],'>',ident.names[2])))))$gene
+    cond2.genes <- (top.expr %>% dplyr::filter(eval(parse(text=paste0(ident.names[1],'<',ident.names[2])))))$gene
+    
     plt.df <- avg.expr %>%
       column_to_rownames('gene')
-    p1 <- ggplot(plt.df, aes(eval(parse(text=paste0(group.names[1]))), eval(parse(text=paste0(group.names[2]))))) +
+    p1 <- ggplot(plt.df, eval(parse(text = paste0('aes(',ident.names[1],',',ident.names[2],')')))) +
       geom_point() +
       ggtitle(ident) +
-      labs(x=group.names[1], y=group.names[2]) +
+      labs(x=ident.names[1], y=ident.names[2]) +
       plot.opts
-    p1 <- LabelPoints(plot=p1, points=genes.to.label, repel=T, xnudge = 0, ynudge = 0, color='blue')
-    plot(p1)
+    if(length(cond1.genes)>0){
+      p1 <- LabelPoints(plot=p1, points=cond1.genes, repel=T, xnudge = 0, ynudge = 0, color='blue')
+    }
+    if(length(cond2.genes)>0){
+      p1 <- LabelPoints(plot=p1, points=cond2.genes, repel=T, xnudge = 0, ynudge = 0, color='red')
+    }
+    
+    top.expr <- list(expr=top.expr, plt=p1)
   }
   
   print(Sys.time() - start.time)
-  return(avg.expr)
+  return(top.expr)
 }
 
 
-fcc.find.conserved.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cells.per.ident=150){
+fcc.corr.expr.per.ident <- function(obj, grouping.var, n.genes.label=10){
+  # correlate average expression within an ident across condition (grouping.var) and return df
+  #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
+  #   grouping.var = meta.data column header to group cells by - usually 'orig.ident' for integrated samples
+  #   n.genes.label = top n non-correlated genes to label on each plot - default top 10
+  start.time <- Sys.time()
+  
+  start.idents <- levels(Idents(obj))
+  
+  markers <- NULL
+  plt.list <- list()
+  for (i in 1:length(start.idents)) {
+    print(paste0('Correlating expression for cluster: ',start.idents[i]))
+    if (is_null(markers)) {
+      tryCatch(
+        {
+          response <- fcc.corr.expr(obj, ident=start.idents[i], grouping.var=grouping.var, plot.out=T, n.genes.label=n.genes.label)
+          markers <- response$expr %>%
+            mutate(cluster=paste(start.idents[i]))
+          plt.list[[i]] <- response$plt
+        }, error=function(cond) {
+          message(paste0(cond,'\n'))
+        }
+      )
+    }else{
+      tryCatch(
+        {
+          response <- fcc.corr.expr(obj, ident=start.idents[i], grouping.var=grouping.var, plot.out=T, n.genes.label=n.genes.label)
+          markers <- rbind(markers, 
+                           response$expr %>%
+                             mutate(cluster=paste(start.idents[i])))
+          plt.list[[i]] <- response$plt
+        }, error=function(cond) {
+          message(paste0(cond,'\n'))
+        }
+      )
+    }
+  }
+  # clean plots for arranging in figure
+  print('Generating figure ... ')
+  clean.plts <- lapply(Filter(Negate(is.null), plt.list), FUN = function(x){return(x+labs(x=NULL,y=NULL)+theme_pubr())})
+  # arrange plots into figure with common labels and clean graphs
+  fig <- ggarrange(plotlist = clean.plts, ncol = ceiling(length(clean.plts)/3), nrow = ceiling(length(clean.plts)/ceiling(length(clean.plts)/3))) %>%
+    annotate_figure(left = text_grob(plt.list[[1]]$labels$y, rot = 90, size = 14), bottom = text_grob(plt.list[[1]]$labels$x, size = 14))
+  
+  print(Sys.time() - start.time)
+  return(list(expr=markers, plt=fig, plt.list=plt.list))
+}
+
+
+fcc.find.conserved.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cells.per.ident=300){
   # ID conserved cell type markers in each cluster across condition (grouping.var) and return df
   #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
   #   grouping.var = meta.data column header to group cells by - usually 'orig.ident' for integrated samples
@@ -133,9 +199,9 @@ fcc.find.conserved.markers <- function(obj, grouping.var, n.genes.per.ident=10, 
     if (is_null(markers)) {
       tryCatch(
         {
-          markers <- FindConservedMarkers(comb.obj.p1, ident.1=id, grouping.var=grouping.var, max.cells.per.ident=max.cells.per.ident) %>% 
+          markers <- FindConservedMarkers(obj, ident.1=id, grouping.var=grouping.var, max.cells.per.ident=max.cells.per.ident) %>% 
             rownames_to_column('gene') %>% 
-            top_n(n.genes.per.ident, wt=minimump_p_val) %>% 
+            top_n(n=n.genes.per.ident, wt=minimump_p_val) %>% 
             mutate(cluster=paste(id))
         }, error=function(cond) {
           message(paste0(cond,'\n'))
@@ -144,7 +210,7 @@ fcc.find.conserved.markers <- function(obj, grouping.var, n.genes.per.ident=10, 
     } else {
       tryCatch(
         {
-          markers <- rbind(markers, FindConservedMarkers(comb.obj.p1, ident.1=id, grouping.var=grouping.var, max.cells.per.ident=max.cells.per.ident) %>% 
+          markers <- rbind(markers, FindConservedMarkers(obj, ident.1=id, grouping.var=grouping.var, max.cells.per.ident=max.cells.per.ident) %>% 
                              rownames_to_column('gene') %>% 
                              top_n(n.genes.per.ident, wt=minimump_p_val) %>% 
                              mutate(cluster=paste(id)))
@@ -159,8 +225,8 @@ fcc.find.conserved.markers <- function(obj, grouping.var, n.genes.per.ident=10, 
   return(markers)
 }
 
-# TODO: Fix this!
-fcc.find.DE.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cells.per.ident=150){
+
+fcc.find.DE.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cells.per.ident=300){
   # ID differentially-expressed cell type markers in each cluster across condition (grouping.var) and return df
   #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
   #   grouping.var = meta.data column header to group cells by - usually 'orig.ident' for integrated samples
@@ -189,7 +255,7 @@ fcc.find.DE.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cel
           markers <- FindMarkers(obj, ident.1=paste(i, conditions[1], sep='_'), ident.2=paste(i, conditions[2], sep='_'), 
                                  max.cells.per.ident=max.cells.per.ident) %>% 
             rownames_to_column('gene') %>% 
-            top_n(n.genes.per.ident, wt=p_val_adj) %>% 
+            top_n(n=n.genes.per.ident, wt=p_val) %>% 
             mutate(cluster=i)
         }, error=function(cond) {
           message(paste0(cond,'\n'))
@@ -201,7 +267,7 @@ fcc.find.DE.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cel
           markers <- rbind(markers, FindMarkers(obj, ident.1=paste(i, conditions[1], sep='_'), ident.2=paste(i, conditions[2], sep='_'), 
                                                 max.cells.per.ident=max.cells.per.ident) %>% 
                              rownames_to_column('gene') %>% 
-                             top_n(n.genes.per.ident, wt=p_val_adj) %>% 
+                             top_n(n=n.genes.per.ident, wt=p_val) %>% 
                              mutate(cluster=i))
         }, error=function(cond) {
           message(paste0(cond,'\n'))
