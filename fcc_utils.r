@@ -5,6 +5,9 @@
 
 require(tidyverse)
 require(Seurat)
+require(scatterpie)
+require(ggpubr)
+# plotting preferences
 source('ggplot_config.r')
 
 
@@ -85,6 +88,65 @@ seurat.pipe <- function(counts, n.pcs=100, k=30, tsne=T, umap=F, perplexity=30, 
 }
 
 
+set.cell.type <- function(obj, names){
+  # create metadata field matching seurat_clusters to cell types
+  #   obj = Seurat object with Idents() set as desired for mapping - usually 'seurat_clusters'
+  #   names = list of strings containing cell type names for each ident.
+  #           should be in order of idents. 
+  #           i.e. if seurat_clusters = c(0,1,2), then names = c('stem','goblet','tuft') would mean {0:'stem',1:'goblet',2:'tuft'}
+  types <- data.frame(seurat_clusters=levels(obj$seurat_clusters), cell.type=names)
+  obj$cell.type <- types$cell.type[match(obj$seurat_clusters, types$seurat_clusters)]
+  return(obj)
+}
+
+
+dimplot.pie <- function(obj, group.by, split.by, r=2, reduction='tsne', ...){
+  # plot reduced dimensions with ident contributions from condition (grouping.var) shown as pie charts
+  #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
+  #   group.by = meta.data column header to plot cells by
+  #   split.by = meta.data column header to split cells by for pie chart - usually 'orig.ident' for integrated samples
+  #   r = radius of each pie chart on the plot
+  #   reduction = type of dimension reduction from seurat object to use
+  #   ... = options to pass to seurat's DimPlot() function
+  start.time <- Sys.time()
+  
+  # get condition names from split.by argument
+  conditions <- eval(parse(text = paste0('unique(obj$',split.by,')')))
+  # get reduction key from seurat object
+  red.key <- eval(parse(text = paste0('obj@reductions$',reduction,'@key')))
+  
+  # initial plot of reduced dimensions to get coords for scatterpie
+  plt <- DimPlot(obj, reduction = reduction, group.by = group.by, label = T)
+  
+  # overlay pie charts on t-SNE that explain batch makeup of each cluster
+  df <- eval(parse(text = paste0('obj@meta.data %>%
+                             group_by(',group.by,') %>%
+                             dplyr::count(',split.by,') %>%
+                             spread(',split.by,', n) %>%
+                             mutate(total=',paste(conditions,collapse='+'),')'
+                             )))
+  
+  for(i in 1:length(conditions)){
+  eval(parse(text = paste0('df <- df %>% 
+                           mutate(',conditions[i],'.pct = ',conditions[i],'/total*100)')))
+  }
+  
+  suppressWarnings(
+    eval(parse(text = paste0('batch.data <- df %>% 
+                             full_join(plt$layers[[2]]$data, by = group.by) %>% 
+                             mutate(',red.key,'2 = ',red.key,'2 - (r+2))')))
+    )
+    
+  print(Sys.time() - start.time)
+  return(DimPlot(obj, reduction = reduction, group.by = group.by, label = T, ...)+DR.opts+NoLegend()+
+           geom_scatterpie(data = batch.data, 
+                           aes(x=eval(parse(text=paste0(red.key,'1'))), 
+                               y=eval(parse(text=paste0(red.key,'2'))), 
+                               r=r), 
+                           cols=conditions))
+}
+
+
 fcc.corr.expr <- function(obj, ident, grouping.var, plot.out=T, n.genes.label=10){
   # correlate average expression within an ident across condition (grouping.var) and return df
   #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
@@ -148,7 +210,7 @@ fcc.corr.expr.per.ident <- function(obj, grouping.var, n.genes.label=10){
   markers <- NULL
   plt.list <- list()
   for (i in 1:length(start.idents)) {
-    print(paste0('Correlating expression for cluster: ',start.idents[i]))
+    message(paste0('Correlating expression for ident: ',start.idents[i]))
     if (is_null(markers)) {
       tryCatch(
         {
@@ -175,7 +237,7 @@ fcc.corr.expr.per.ident <- function(obj, grouping.var, n.genes.label=10){
     }
   }
   # clean plots for arranging in figure
-  print('Generating figure ... ')
+  message('Generating figure ... ')
   clean.plts <- lapply(Filter(Negate(is.null), plt.list), FUN = function(x){return(x+labs(x=NULL,y=NULL)+theme_pubr())})
   # arrange plots into figure with common labels and clean graphs
   fig <- ggarrange(plotlist = clean.plts, ncol = ceiling(length(clean.plts)/3), nrow = ceiling(length(clean.plts)/ceiling(length(clean.plts)/3))) %>%
@@ -238,7 +300,7 @@ fcc.find.DE.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cel
   conditions <- unique(eval(parse(text=paste0('obj$',grouping.var))))
   
   if (length(conditions)!=2){
-    print('Only capable of DE analysis of binary conditions')
+    message('Only capable of DE analysis of binary conditions')
     return()
   }
   
@@ -248,7 +310,7 @@ fcc.find.DE.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cel
   markers <- NULL
   
   for (i in start.idents) {
-    print(paste0('Performing differential expression analysis between ', conditions[1], ' and ', conditions[2], ' for ', i))
+    message(paste0('Performing differential expression analysis between ', conditions[1], ' and ', conditions[2], ' for ident: ', i))
     if (is_null(markers)) {
       tryCatch(
         {
@@ -281,7 +343,7 @@ fcc.find.DE.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cel
 }
 
 
-fcc.predictcelltype<-function(qdata, ref.expr, anntext="Query", corcutoff=0){
+fcc.predictcelltype <- function(qdata, ref.expr, anntext="Query", corcutoff=0){
   # predict cell types based on expression correlation with reference database
   # adapted from scUnifrac (https://github.com/liuqivandy/scUnifrac)
   #   qdata = matrix of counts in cells x genes format, with cell and gene labels as rownames and colnames, respectively
@@ -301,19 +363,38 @@ fcc.predictcelltype<-function(qdata, ref.expr, anntext="Query", corcutoff=0){
     
     cors_index <- unlist(apply(cors,2,function(x){cutoffind<-tail(sort(x),3)>corcutoff;return(order(x,decreasing=T)[1:3][cutoffind])}))
     
-    cors_in <- cors[cors_index,]
-    cors_in <- cors_in[unique(rownames(cors_in)),]
-    
     tryCatch(
       {
-        heatmap(cors_in, labCol=F, margins=c(0.5,10), cexRow=0.7)
+        cors_in <- cors[cors_index,]
+        cors_in <- cors_in[unique(rownames(cors_in)),]
+        heatmap(cors_in, labCol=F, margins=c(0.5,10), cexRow=0.7, main=anntext)
         return(cors_in)
       }, error=function(cond) {
         message(paste0('No cell type correlations detected above ', corcutoff))
         message(paste0(cond,'\n'))
-      }, warning=function(cond) {
-        message(paste0(cond,'\n'))
       }
     )
   }
+}
+
+
+fcc.predictcelltype.per.ident <- function(obj, ref.expr, corcutoff){
+  # predict cell types for each ident in Seurat object based on expression correlation with reference database
+  # adapted from scUnifrac (https://github.com/liuqivandy/scUnifrac)
+  #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
+  #   ref.expr = matrix of expression by cell type from reference database. 
+  #              can be loaded using `load(system.file("extdata", "ref.expr.Rdata", package = "scUnifrac"))`
+  #   corcutoff = minimum correlation value to require before returning cell type prediction
+  start.time <- Sys.time()
+  
+  # use scUnifrac to predict cell type for each ident from expression
+  for (id in levels(obj@active.ident)) {
+    message(paste0('Predicting cell types from ident: ', id))
+    cell.type.pred <- fcc.predictcelltype(as.matrix(obj@assays$RNA@counts[,WhichCells(obj, ident=id)]), 
+                                          ref.expr = ref.expr, 
+                                          corcutoff = corcutoff,
+                                          anntext = id)
+  }
+  rm(cell.type.pred)
+  print(Sys.time() - start.time)
 }
