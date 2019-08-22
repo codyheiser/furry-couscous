@@ -123,6 +123,7 @@ dimplot.pie <- function(obj, group.by, split.by, r=2, reduction='tsne', ...){
                              group_by(',group.by,') %>%
                              dplyr::count(',split.by,') %>%
                              spread(',split.by,', n) %>%
+                             replace(is.na(.),0) %>%
                              mutate(total=',paste(conditions,collapse='+'),')'
                              )))
   
@@ -147,21 +148,28 @@ dimplot.pie <- function(obj, group.by, split.by, r=2, reduction='tsne', ...){
 }
 
 
-fcc.corr.expr <- function(obj, ident, grouping.var, plot.out=T, n.genes.label=10){
+fcc.corr.expr <- function(obj, ident, grouping.var, plot.out=T, n.genes.label=10, groups=NULL){
   # correlate average expression within an ident across condition (grouping.var) and return df
   #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
   #   ident = name of ident to correlate expression within
   #   grouping.var = meta.data column header to group cells by - usually 'orig.ident' for integrated samples
   #   plot.out = scatterplot correlation of expression?
   #   n.genes.label = top n non-correlated genes to label on plot - default top 10
+  #   groups = list of two conditions to compare, i.e. c('normal','tumor'). default is first two results of levels(obj$grouping.var).
   start.time <- Sys.time()
   
   s <- subset(obj, idents=ident)
+  
   Idents(s) <- grouping.var
-  ident.names <- levels(Idents(s))
+  if(is.null(groups)){
+    group.names <- levels(Idents(s))
+  }else{
+    group.names <- groups
+  }
+  
   avg.expr <- log1p(AverageExpression(s)$RNA) %>%
     rownames_to_column('gene') %>%
-    mutate(diff=eval(parse(text=paste0('abs(',ident.names[1],'-',ident.names[2],')')))) %>%
+    mutate(diff=eval(parse(text=paste0('abs(',group.names[1],'-',group.names[2],')')))) %>%
     arrange(-diff)
   
   top.expr <- avg.expr %>%
@@ -173,15 +181,15 @@ fcc.corr.expr <- function(obj, ident, grouping.var, plot.out=T, n.genes.label=10
   }
   
   if(plot.out){
-    cond1.genes <- (top.expr %>% dplyr::filter(eval(parse(text=paste0(ident.names[1],'>',ident.names[2])))))$gene
-    cond2.genes <- (top.expr %>% dplyr::filter(eval(parse(text=paste0(ident.names[1],'<',ident.names[2])))))$gene
+    cond1.genes <- (top.expr %>% dplyr::filter(eval(parse(text=paste0(group.names[1],'>',group.names[2])))))$gene
+    cond2.genes <- (top.expr %>% dplyr::filter(eval(parse(text=paste0(group.names[1],'<',group.names[2])))))$gene
     
     plt.df <- avg.expr %>%
       column_to_rownames('gene')
-    p1 <- ggplot(plt.df, eval(parse(text = paste0('aes(',ident.names[1],',',ident.names[2],')')))) +
+    p1 <- ggplot(plt.df, eval(parse(text = paste0('aes(',group.names[1],',',group.names[2],')')))) +
       geom_point() +
       ggtitle(ident) +
-      labs(x=ident.names[1], y=ident.names[2]) +
+      labs(x=group.names[1], y=group.names[2]) +
       plot.opts
     if(length(cond1.genes)>0){
       p1 <- LabelPoints(plot=p1, points=cond1.genes, repel=T, xnudge = 0, ynudge = 0, color='blue')
@@ -198,11 +206,12 @@ fcc.corr.expr <- function(obj, ident, grouping.var, plot.out=T, n.genes.label=10
 }
 
 
-fcc.corr.expr.per.ident <- function(obj, grouping.var, n.genes.label=10){
+fcc.corr.expr.per.ident <- function(obj, grouping.var, n.genes.label=10, groups=NULL){
   # correlate average expression within an ident across condition (grouping.var) and return df
   #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
   #   grouping.var = meta.data column header to group cells by - usually 'orig.ident' for integrated samples
   #   n.genes.label = top n non-correlated genes to label on each plot - default top 10
+  #   groups = list of two conditions to compare, i.e. c('normal','tumor'). default is first two results of levels(obj$grouping.var).
   start.time <- Sys.time()
   
   start.idents <- levels(Idents(obj))
@@ -214,7 +223,7 @@ fcc.corr.expr.per.ident <- function(obj, grouping.var, n.genes.label=10){
     if (is_null(markers)) {
       tryCatch(
         {
-          response <- fcc.corr.expr(obj, ident=start.idents[i], grouping.var=grouping.var, plot.out=T, n.genes.label=n.genes.label)
+          response <- fcc.corr.expr(obj, ident=start.idents[i], grouping.var=grouping.var, plot.out=T, n.genes.label=n.genes.label, groups=groups)
           markers <- response$expr %>%
             mutate(cluster=paste(start.idents[i]))
           plt.list[[i]] <- response$plt
@@ -225,7 +234,7 @@ fcc.corr.expr.per.ident <- function(obj, grouping.var, n.genes.label=10){
     }else{
       tryCatch(
         {
-          response <- fcc.corr.expr(obj, ident=start.idents[i], grouping.var=grouping.var, plot.out=T, n.genes.label=n.genes.label)
+          response <- fcc.corr.expr(obj, ident=start.idents[i], grouping.var=grouping.var, plot.out=T, n.genes.label=n.genes.label, groups=groups)
           markers <- rbind(markers, 
                            response$expr %>%
                              mutate(cluster=paste(start.idents[i])))
