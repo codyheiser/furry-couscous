@@ -767,13 +767,13 @@ class pita(couscous):
         '''
         # transform data first, if necessary
         if transform is None:
-            mapper = pd.DataFrame(self.data[data_type], index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+            mapper = pd.DataFrame(self.data[feature_type], index=self.data['counts'].index) # coerce to pd.DF with bead ID index
 
         if transform == 'arcsinh':
-            mapper = pd.DataFrame(self.arcsinh_norm(data_type=data_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+            mapper = pd.DataFrame(self.arcsinh_norm(data_type=feature_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
 
         elif transform == 'log2':
-            mapper = pd.DataFrame(self.log2_norm(data_type=data_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+            mapper = pd.DataFrame(self.log2_norm(data_type=feature_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
 
         # determine which reference pixel map to use
         if trimmed:
