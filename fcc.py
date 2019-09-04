@@ -62,98 +62,12 @@ class couscous():
             self.barcodes = None
 
 
-    def distance_matrix(self, data_type='counts', transform=None, ranks='all', **kwargs):
-        '''
-        calculate Euclidean distances between cells in matrix of shape (n_cells, n_cells)
-            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to calculate distances in
-            transform = how to normalize and transform data prior to calculating distances (None, "arcsinh", or "log2")
-            ranks = which barcodes to return distances for. Can be list of ranks of most abundant barcodes (integers, i.e. [1,2,3] for top 3 barcodes),
-                or names of barcode IDs (strings, i.e. ['0','1','2'] for barcodes with numbered IDs)
-            **kwargs = keyword arguments to pass to normalization functions
-        '''
-        # transform data first, if necessary
-        if transform is None:
-            transformed = self.data[data_type]
-
-        if transform == 'arcsinh':
-            transformed = self.arcsinh_norm(data_type=data_type, **kwargs)
-
-        elif transform == 'log2':
-            transformed = self.log2_norm(data_type=data_type, **kwargs)
-
-        # then subset data by rank-ordered barcode appearance
-        if ranks=='all':
-            return sc.spatial.distance_matrix(transformed, transformed)
-
-        elif not isinstance(ranks, (list,)): # make sure input is list-formatted
-            ranks = [ranks]
-
-        assert self.barcodes is not None, 'Barcodes not assigned.\n'
-        ints = [x for x in ranks if type(x)==int] # pull out rank values
-        IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
-        ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
-        ranks_counts = transformed[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed data
-        return sc.spatial.distance_matrix(ranks_counts, ranks_counts)
-
-
-    def barcode_distance_matrix(self, ranks, data_type='counts', transform=None, **kwargs):
-        '''
-        calculate Euclidean distances between cells in two barcode groups within a dataset
-            ranks = which TWO barcodes to calculate distances between. List of ranks of most abundant barcodes (integers, i.e. [1,2] for top 2 barcodes),
-                or names of barcode IDs (strings, i.e. ['0','2'] for barcodes with numbered IDs)
-            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to calculate distances in
-            transform = how to normalize and transform data prior to calculating distances (None, "arcsinh", or "log2")
-            **kwargs = keyword arguments to pass to normalization functions
-        '''
-        assert self.barcodes is not None, 'Barcodes not assigned.\n'
-
-        # transform data first, if necessary
-        if transform is None:
-            transformed = np.ascontiguousarray(self.data[data_type])
-
-        if transform == 'arcsinh':
-            transformed = self.arcsinh_norm(data_type=data_type, **kwargs)
-
-        elif transform == 'log2':
-            transformed = self.log2_norm(data_type=data_type, **kwargs)
-
-        ranks_0 = transformed[np.array(self.barcodes.isin(list(ranks[0])))] # subset transformed counts array to first barcode ID
-        ranks_1 = transformed[np.array(self.barcodes.isin(list(ranks[1])))] # subset transformed counts array to second barcode ID
-        return sc.spatial.distance_matrix(ranks_0, ranks_1)
-
-
-    def knn_graph(self, k, data_type='counts', **kwargs):
-        '''
-        calculate k nearest neighbors for each cell in distance matrix of shape (n_cells, n_cells)
-            k = number of nearest neighbors to determine
-            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to calculate distances in
-            **kwargs = keyword arguments to pass to distance_matrix() function
-        '''
-        return kneighbors_graph(self.distance_matrix(data_type=data_type, **kwargs), k, mode='connectivity', include_self=False).toarray()
-
-
-    def barcode_counts(self, IDs='all'):
-        '''
-        given list of barcode IDs, return pd.Series of number of appearances in dataset
-            IDs = which barcodes to return distances for. List of names of barcode IDs (strings, i.e. ['0','1','2'] for barcodes with numbered IDs)
-        '''
-        assert self.barcodes is not None, 'Barcodes not assigned.\n'
-
-        if IDs=='all':
-            return self.barcodes.value_counts()
-
-        if not isinstance(IDs, (list,)): # make sure input is list-formatted
-            IDs = [IDs]
-
-        return self.barcodes.value_counts()[self.barcodes.value_counts().index.isin(IDs)]
-
-
     def arcsinh_norm(self, data_type='counts', norm='l1', scale=1000, ranks='all'):
         '''
         Perform an arcsinh-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
         Useful for feeding into PCA or tSNE.
             data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing data to normalize
-            norm = normalization strategy prior to Log2 transform.
+            norm = normalization strategy prior to arcsinh transform.
                 None: do not normalize data
                 'l1': divide each feature by sum of features for each cell
                 'l2': divide each feature by sqrt of sum of squares of features for cell.
@@ -211,6 +125,135 @@ class couscous():
         return out[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed counts array
 
 
+    def gficf_norm(self, data_type='counts', norm='l1', ranks='all'):
+        '''
+        Normalize a np.ndarray containing raw data of shape=(n_cells,n_genes) using the gene frequency - inverse cell frequency (GF-ICF) method.
+        Adapted from Gambardella & di Bernardo (2019).  Useful for feeding into PCA or tSNE.
+            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing data to normalize
+            norm = normalization strategy following GF-ICF score calculation for each element.
+                None: do not normalize data
+                'l1': divide each feature by sum of features for each cell
+                'l2': divide each feature by sqrt of sum of squares of features for cell.
+            ranks = which barcodes to keep after normalization. Can be list of ranks of most abundant barcodes (integers, i.e. [1,2,3] for top 3 barcodes),
+                or names of barcode IDs (strings, i.e. ['0','1','2'] for barcodes with numbered IDs)
+        '''
+        tf = self.data[data_type].T / self.data[data_type].sum(axis=1)
+        tf = tf.T
+
+        ni = self.data[data_type].astype(bool).sum(axis=0)
+        idf = np.log(self.data[data_type].shape[0] / (ni+1))
+
+        if not norm:
+            out = tf*idf
+
+        else:
+            out = normalize(tf*idf, axis=1, norm=norm)
+
+        if ranks=='all':
+            return out
+
+        elif not isinstance(ranks, (list,)): # make sure input is list-formatted
+            ranks = [ranks]
+
+        assert self.barcodes is not None, 'Barcodes not assigned.\n'
+        ints = [x for x in ranks if type(x)==int] # pull out rank values
+        IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
+        ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
+        return out[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed counts array
+
+
+    def distance_matrix(self, data_type='counts', transform=None, ranks='all', **kwargs):
+        '''
+        calculate Euclidean distances between cells in matrix of shape (n_cells, n_cells)
+            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to calculate distances in
+            transform = how to normalize and transform data prior to calculating distances (None, "arcsinh", or "log2")
+            ranks = which barcodes to return distances for. Can be list of ranks of most abundant barcodes (integers, i.e. [1,2,3] for top 3 barcodes),
+                or names of barcode IDs (strings, i.e. ['0','1','2'] for barcodes with numbered IDs)
+            **kwargs = keyword arguments to pass to normalization functions
+        '''
+        # transform data first, if necessary
+        if transform is None:
+            transformed = self.data[data_type]
+
+        elif transform == 'arcsinh':
+            transformed = self.arcsinh_norm(data_type=data_type, **kwargs)
+
+        elif transform == 'log2':
+            transformed = self.log2_norm(data_type=data_type, **kwargs)
+
+        elif transform == 'gficf':
+            transformed = self.gficf_norm(data_type=data_type, **kwargs)
+
+        # then subset data by rank-ordered barcode appearance
+        if ranks=='all':
+            return scipy.spatial.distance_matrix(transformed, transformed)
+
+        elif not isinstance(ranks, (list,)): # make sure input is list-formatted
+            ranks = [ranks]
+
+        assert self.barcodes is not None, 'Barcodes not assigned.\n'
+        ints = [x for x in ranks if type(x)==int] # pull out rank values
+        IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
+        ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
+        ranks_counts = transformed[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed data
+        return scipy.spatial.distance_matrix(ranks_counts, ranks_counts)
+
+
+    def barcode_distance_matrix(self, ranks, data_type='counts', transform=None, **kwargs):
+        '''
+        calculate Euclidean distances between cells in two barcode groups within a dataset
+            ranks = which TWO barcodes to calculate distances between. List of ranks of most abundant barcodes (integers, i.e. [1,2] for top 2 barcodes),
+                or names of barcode IDs (strings, i.e. ['0','2'] for barcodes with numbered IDs)
+            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to calculate distances in
+            transform = how to normalize and transform data prior to calculating distances (None, "arcsinh", or "log2")
+            **kwargs = keyword arguments to pass to normalization functions
+        '''
+        assert self.barcodes is not None, 'Barcodes not assigned.\n'
+
+        # transform data first, if necessary
+        if transform is None:
+            transformed = np.ascontiguousarray(self.data[data_type])
+
+        elif transform == 'arcsinh':
+            transformed = self.arcsinh_norm(data_type=data_type, **kwargs)
+
+        elif transform == 'log2':
+            transformed = self.log2_norm(data_type=data_type, **kwargs)
+
+        elif transform == 'gficf':
+            transformed = self.gficf_norm(data_type=data_type, **kwargs)
+
+        ranks_0 = transformed[np.array(self.barcodes.isin(list(ranks[0])))] # subset transformed counts array to first barcode ID
+        ranks_1 = transformed[np.array(self.barcodes.isin(list(ranks[1])))] # subset transformed counts array to second barcode ID
+        return scipy.spatial.distance_matrix(ranks_0, ranks_1)
+
+
+    def knn_graph(self, k, data_type='counts', **kwargs):
+        '''
+        calculate k nearest neighbors for each cell in distance matrix of shape (n_cells, n_cells)
+            k = number of nearest neighbors to determine
+            data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to calculate distances in
+            **kwargs = keyword arguments to pass to distance_matrix() function
+        '''
+        return kneighbors_graph(self.distance_matrix(data_type=data_type, **kwargs), k, mode='connectivity', include_self=False).toarray()
+
+
+    def barcode_counts(self, IDs='all'):
+        '''
+        given list of barcode IDs, return pd.Series of number of appearances in dataset
+            IDs = which barcodes to return distances for. List of names of barcode IDs (strings, i.e. ['0','1','2'] for barcodes with numbered IDs)
+        '''
+        assert self.barcodes is not None, 'Barcodes not assigned.\n'
+
+        if IDs=='all':
+            return self.barcodes.value_counts()
+
+        if not isinstance(IDs, (list,)): # make sure input is list-formatted
+            IDs = [IDs]
+
+        return self.barcodes.value_counts()[self.barcodes.value_counts().index.isin(IDs)]
+
+
     def fcc_PCA(self, n_components, data_type='counts', transform=None, **kwargs):
         '''
         principal component analysis
@@ -227,6 +270,9 @@ class couscous():
 
         elif transform == 'log2':
             transformed = self.log2_norm(data_type=data_type, **kwargs)
+
+        elif transform == 'gficf':
+            transformed = self.gficf_norm(data_type=data_type, **kwargs)
 
         self.PCA_fit = PCA(n_components=n_components).fit(transformed) # fit PCA to data
         self.data['PCA'] = self.PCA_fit.transform(transformed) # transform data to PCA space and save in data attribute
@@ -246,11 +292,14 @@ class couscous():
         if transform is None:
             transformed = self.data[data_type]
 
-        if transform == 'arcsinh':
+        elif transform == 'arcsinh':
             transformed = self.arcsinh_norm(data_type=data_type, **kwargs)
 
         elif transform == 'log2':
             transformed = self.log2_norm(data_type=data_type, **kwargs)
+
+        elif transform == 'gficf':
+            transformed = self.gficf_norm(data_type=data_type, **kwargs)
 
         self.tSNE_fit = TSNE(perplexity=perplexity, random_state=seed).fit(transformed)
         self.data['t-SNE'] = self.tSNE_fit.fit_transform(transformed)
@@ -270,11 +319,14 @@ class couscous():
         if transform is None:
             transformed = self.data[data_type]
 
-        if transform == 'arcsinh':
+        elif transform == 'arcsinh':
             transformed = self.arcsinh_norm(data_type=data_type, **kwargs)
 
         elif transform == 'log2':
             transformed = self.log2_norm(data_type=data_type, **kwargs)
+
+        elif transform == 'gficf':
+            transformed = self.gficf_norm(data_type=data_type, **kwargs)
 
         self.UMAP_fit = UMAP(n_neighbors=perplexity, random_state=seed).fit(transformed)
         self.data['UMAP'] = self.UMAP_fit.transform(transformed)
@@ -315,7 +367,7 @@ class couscous():
         IDs, counts = np.unique(self.clu[data_type].membership, return_counts=True) # get cluster counts and IDs
         bbox_props = dict(boxstyle="round", fc="w", ec="0.5", alpha=0.9) # set up annotate box
         # add percentages of each cluster to plot
-        for ID, count, x, y in zip(IDs, counts, self.data[data_type][self.clu[data_type].clusters, 0], self.data[data_type][self.clu[data_type].clusters, 1]):
+        for _, count, x, y in zip(IDs, counts, self.data[data_type][self.clu[data_type].clusters, 0], self.data[data_type][self.clu[data_type].clusters, 1]):
             ax[2].annotate('{} %'.format(np.round(count/counts.sum()*100,2)), xy=(x, y), ha="center", va="center", size=12, bbox=bbox_props)
 
         for _ax in ax:
@@ -377,7 +429,7 @@ class couscous():
             
         plotter = np.ascontiguousarray(self.data[data_type]) # coerce data to np array for plotting
 
-        fig, ax = plt.subplots(1, figsize=figsize)
+        _, ax = plt.subplots(1, figsize=figsize)
         sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.7, hue=color, legend=legend, edgecolor='none')
 
         if data_type == 'PCA':
@@ -421,7 +473,7 @@ class couscous():
 
         plotter = np.ascontiguousarray(self.data[data_type]) # coerce data to np array for plotting
 
-        fig, ax = plt.subplots(1, figsize=figsize)
+        _, ax = plt.subplots(1, figsize=figsize)
 
         if ranks == 'all':
             sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=legend, edgecolor='none', palette='plasma')
@@ -736,16 +788,16 @@ class pita(couscous):
         self.grid_x, self.grid_y = np.mgrid[xmin:xmax, ymin:ymax]
 
         # map beads to pixel grid
-        self.pixel_map = sc.interpolate.griddata(self.data['slide-seq'].values, self.data['slide-seq'].index, (self.grid_x, self.grid_y), method='nearest')
+        self.pixel_map = scipy.interpolate.griddata(self.data['slide-seq'].values, self.data['slide-seq'].index, (self.grid_x, self.grid_y), method='nearest')
 
 
     def trim_pixels(self, threshold=100):
         '''
         trim_pixels
         '''
-        tree = sc.spatial.cKDTree(self.data['slide-seq'].values)
-        xi = sc.interpolate.interpnd._ndim_coords_from_arrays((self.grid_x, self.grid_y), ndim=self.data['slide-seq'].shape[1])
-        dists, indices = tree.query(xi)
+        tree = scipy.spatial.cKDTree(self.data['slide-seq'].values)
+        xi = scipy.interpolate.interpnd._ndim_coords_from_arrays((self.grid_x, self.grid_y), ndim=self.data['slide-seq'].shape[1])
+        dists, _ = tree.query(xi)
 
         self.show_pita(assembled=dists, figsize=(4,4))
         #self.show_pita(assembled=threshold(dists, thresh=threshold, dir='above'), figsize=(4,4))
