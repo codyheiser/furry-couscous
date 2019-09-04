@@ -6,7 +6,7 @@
 # basics
 import numpy as np
 import pandas as pd
-import scipy as sc
+import scipy
 # scikit packages
 from skbio.stats.distance import mantel					# Mantel test for correlation of symmetric distance matrices
 # plotting packages
@@ -14,6 +14,16 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns; sns.set(style = 'white')
 
+
+
+def reorder_AnnData(AnnData, descending = True):
+    AnnData.obs['n_counts'] = AnnData.X.sum(axis=1)
+    if(descending==True):
+        new_order = np.argsort(AnnData.obs['n_counts'])[::-1]
+    elif(descending==False):
+        new_order = np.argsort(AnnData.obs['n_counts'])[:]
+    AnnData.X = AnnData.X[new_order,:].copy()
+    AnnData.obs = AnnData.obs.iloc[new_order].copy()
 
 
 def threshold(mat, thresh=0.5, dir='above'):
@@ -77,14 +87,14 @@ def distance_stats(pre, post):
         post_flat = post.flatten()
 
         # calculate correlation coefficient using Pearson correlation
-        corr_stats = sc.stats.pearsonr(x=pre_flat, y=post_flat)
+        corr_stats = scipy.stats.pearsonr(x=pre_flat, y=post_flat)
 
     # normalize flattened distances by z-score within each set for fair comparison of probability distributions
     pre_flat_norm = (pre_flat-pre_flat.min())/(pre_flat.max()-pre_flat.min())
     post_flat_norm = (post_flat-post_flat.min())/(post_flat.max()-post_flat.min())
 
     # calculate EMD for the distance matrices
-    EMD = sc.stats.wasserstein_distance(pre_flat_norm, post_flat_norm)
+    EMD = scipy.stats.wasserstein_distance(pre_flat_norm, post_flat_norm)
 
     return pre_flat_norm, post_flat_norm, corr_stats, EMD
 
@@ -253,8 +263,8 @@ def cluster_arrangement(pre_obj, post_obj, pre_type, post_type, clusters, cluste
     post_norm_1_2 = post_norm[post_0_1.shape[0]+post_0_2.shape[0]:]
 
     # calculate EMD and Pearson correlation stats
-    EMD = [sc.stats.wasserstein_distance(dist_norm_0_1, post_norm_0_1), sc.stats.wasserstein_distance(dist_norm_0_2, post_norm_0_2), sc.stats.wasserstein_distance(dist_norm_1_2, post_norm_1_2)]
-    corr_stats = [sc.stats.pearsonr(x=dist_0_1, y=post_0_1)[0], sc.stats.pearsonr(x=dist_0_2, y=post_0_2)[0], sc.stats.pearsonr(x=dist_1_2, y=post_1_2)[0]]
+    EMD = [scipy.stats.wasserstein_distance(dist_norm_0_1, post_norm_0_1), scipy.stats.wasserstein_distance(dist_norm_0_2, post_norm_0_2), scipy.stats.wasserstein_distance(dist_norm_1_2, post_norm_1_2)]
+    corr_stats = [scipy.stats.pearsonr(x=dist_0_1, y=post_0_1)[0], scipy.stats.pearsonr(x=dist_0_2, y=post_0_2)[0], scipy.stats.pearsonr(x=dist_1_2, y=post_1_2)[0]]
 
     # generate jointplot
     g = sns.JointGrid(x=dist_norm, y=post_norm, space=0, height=figsize[0])
