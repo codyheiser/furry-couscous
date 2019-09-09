@@ -1,7 +1,7 @@
 # utility functions
 
 # @author: C Heiser
-# June 2019
+# Sep 2019
 
 # basics
 import numpy as np
@@ -70,6 +70,24 @@ def recipe_fcc(adata, mito_names='MT-'):
 
     # HVGs
     sc.pp.highly_variable_genes(adata, flavor='seurat', n_top_genes=2000)
+
+
+def gf_icf_markers(adata, n_genes=5, group_by='louvain'):
+    '''
+    return n_genes with top gf-icf scores for each group
+        adata = AnnData object preprocessed using gf_icf() or recipe_fcc() function
+        n_genes = number of top gf-icf scored genes to return per group
+        group_by = how to group cells to ID marker genes
+    '''
+    markers = pd.DataFrame()
+    for clu in adata.obs[group_by].unique():
+        gf_icf_sum = adata.layers['gf-icf'][adata.obs[group_by]==str(clu)].sum(axis=0)
+        gf_icf_mean = adata.layers['gf-icf'][adata.obs[group_by]==str(clu)].mean(axis=0)
+        top = np.argpartition(gf_icf_sum, -n_genes)[-n_genes:]
+        gene_IDs = adata.var.index[top]
+        markers = markers.append(pd.DataFrame({group_by:np.repeat(clu,n_genes), 'gene':gene_IDs, 'gf-icf_sum':gf_icf_sum[top], 'gf-icf_mean':gf_icf_mean[top]}))
+
+    return markers
 
 
 def plot_DR(data, color, pt_size=75, dim_name='dim', figsize=(5,5), legend=None, save_to=None):
