@@ -375,9 +375,17 @@ fcc.predictcelltype <- function(qdata, ref.expr, anntext="Query", corcutoff=0){
     tryCatch(
       {
         cors_in <- cors[cors_index,]
-        cors_in <- cors_in[unique(rownames(cors_in)),]
-        heatmap(cors_in, labCol=F, margins=c(0.5,10), cexRow=0.7, main=anntext)
-        return(cors_in)
+        cors_in <- cors_in[unique(rownames(cors_in)),] # exclude duplicate cell type IDs
+        cors_in <- cors_in[order(rowMeans(cors_in),decreasing=T),] # reorder decreasing by average correlation
+        
+        cors_out <- as.data.frame(cors_in) %>%
+          rownames_to_column(var='cell.type') %>%
+          mutate(mean=rowMeans(cors_in), std=rowSds(cors_in), med=rowMedians(cors_in)) %>%
+          select(cell.type, mean, med, std)
+        
+        #heatmap(t(cors_in), margins=c(10,0.5), cexCol=0.7, main=anntext, Colv = NA, labRow=F)
+        heatmap.2(t(cors_in), cexCol=0.7, main=anntext, dendrogram='row', labRow=F, trace='none', key=T, srtCol = 40, margins=c(8,1), density.info='none', Colv=F)
+        return(list(cors_in, cors_out))
       }, error=function(cond) {
         message(paste0('No cell type correlations detected above ', corcutoff))
         message(paste0(cond,'\n'))
@@ -395,15 +403,18 @@ fcc.predictcelltype.per.ident <- function(obj, ref.expr, corcutoff){
   #              can be loaded using `load(system.file("extdata", "ref.expr.Rdata", package = "scUnifrac"))`
   #   corcutoff = minimum correlation value to require before returning cell type prediction
   start.time <- Sys.time()
-  
+  cell.type.pred <- NULL
   # use scUnifrac to predict cell type for each ident from expression
   for (id in levels(obj@active.ident)) {
     message(paste0('Predicting cell types from ident: ', id))
-    cell.type.pred <- fcc.predictcelltype(as.matrix(obj@assays$RNA@counts[,WhichCells(obj, ident=id)]), 
-                                          ref.expr = ref.expr, 
-                                          corcutoff = corcutoff,
-                                          anntext = id)
+    if (is.null(cell.type.pred)) {
+      cell.type.pred <- fcc.predictcelltype(as.matrix(obj@assays$RNA@data[,WhichCells(obj, ident=id)]), 
+                                            ref.expr = ref.expr, corcutoff = corcutoff, anntext = id)[[2]] %>% mutate(ident=id)
+    } else {
+      cell.type.pred <- rbind(cell.type.pred, fcc.predictcelltype(as.matrix(obj@assays$RNA@counts[,WhichCells(obj, ident=id)]),
+                                                                  ref.expr = ref.expr, corcutoff = corcutoff, anntext = id)[[2]] %>% mutate(ident=id))
+    }
   }
-  rm(cell.type.pred)
   print(Sys.time() - start.time)
+  return(cell.type.pred)
 }

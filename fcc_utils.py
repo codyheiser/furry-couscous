@@ -1,12 +1,13 @@
 # utility functions
 
 # @author: C Heiser
-# June 2019
+# Sep 2019
 
 # basics
 import numpy as np
 import pandas as pd
 import scipy
+import scanpy as sc
 # scikit packages
 from skbio.stats.distance import mantel					# Mantel test for correlation of symmetric distance matrices
 # plotting packages
@@ -16,16 +17,107 @@ import seaborn as sns; sns.set(style = 'white')
 
 
 
-def reorder_AnnData(AnnData, descending = True):
-    AnnData.obs['n_counts'] = AnnData.X.sum(axis=1)
+# scanpy functions
+def reorder_adata(adata, descending = True):
+    '''place cells in descending order of total counts'''
     if(descending==True):
-        new_order = np.argsort(AnnData.obs['n_counts'])[::-1]
+        new_order = np.argsort(adata.X.sum(axis=1))[::-1]
     elif(descending==False):
-        new_order = np.argsort(AnnData.obs['n_counts'])[:]
-    AnnData.X = AnnData.X[new_order,:].copy()
-    AnnData.obs = AnnData.obs.iloc[new_order].copy()
+        new_order = np.argsort(adata.X.sum(axis=1))[:]
+    adata.X = adata.X[new_order,:].copy()
+    adata.obs = adata.obs.iloc[new_order].copy()
 
 
+def gf_icf(adata):
+    '''return GF-ICF scores for each element in anndata counts matrix'''
+    tf = adata.X.T / adata.X.sum(axis=1)
+    tf = tf.T
+    
+    ni = adata.X.astype(bool).sum(axis=0)
+    idf = np.log(adata.n_obs / (ni+1))
+    
+    adata.layers['gf-icf'] = tf*idf
+
+
+def recipe_fcc(adata, mito_names='MT-'):
+    '''
+    scanpy preprocessing recipe
+        adata = AnnData object with raw counts data in .X 
+        mito_names = substring encompassing mitochondrial gene names for calculation of mito expression
+
+    -calculates useful .obs and .var columns ('total_counts', 'pct_counts_mito', 'n_genes_by_counts', etc.)
+    -orders cells by total counts
+    -stores raw counts (adata.raw.X)
+    -provides GF-ICF normalization (adata.layers['gf-icf'])
+    -normalization and log1p transformation of counts (adata.X)
+    -identifies highly-variable genes using seurat method (adata.var['highly_variable'])
+    '''
+    reorder_adata(adata, descending=True) # reorder cells by total counts descending
+
+    # raw
+    adata.raw = adata # store raw counts before manipulation
+
+    # obs/var
+    adata.var['mito'] = adata.var_names.str.contains(mito_names) # identify mitochondrial genes
+    sc.pp.calculate_qc_metrics(adata, qc_vars=['mito'], inplace=True) # calculate standard qc .obs and .var
+
+    # gf-icf
+    gf_icf(adata) # add gf-icf scores to adata.layers['gf-icf']
+
+    # normalize/transform
+    sc.pp.normalize_total(adata, target_sum=10000, layers='all', layer_norm='after', key_added='norm_factor')
+    sc.pp.log1p(adata) # log1p transform counts
+
+    # HVGs
+    sc.pp.highly_variable_genes(adata, flavor='seurat', n_top_genes=2000)
+
+
+def gf_icf_markers(adata, n_genes=5, group_by='louvain'):
+    '''
+    return n_genes with top gf-icf scores for each group
+        adata = AnnData object preprocessed using gf_icf() or recipe_fcc() function
+        n_genes = number of top gf-icf scored genes to return per group
+        group_by = how to group cells to ID marker genes
+    '''
+    markers = pd.DataFrame()
+    for clu in adata.obs[group_by].unique():
+        gf_icf_sum = adata.layers['gf-icf'][adata.obs[group_by]==str(clu)].sum(axis=0)
+        gf_icf_mean = adata.layers['gf-icf'][adata.obs[group_by]==str(clu)].mean(axis=0)
+        top = np.argpartition(gf_icf_sum, -n_genes)[-n_genes:]
+        gene_IDs = adata.var.index[top]
+        markers = markers.append(pd.DataFrame({group_by:np.repeat(clu,n_genes), 'gene':gene_IDs, 'gf-icf_sum':gf_icf_sum[top], 'gf-icf_mean':gf_icf_mean[top]}))
+
+    return markers
+
+
+def plot_DR(data, color, pt_size=75, dim_name='dim', figsize=(5,5), legend=None, save_to=None):
+    '''general plotting function for dimensionality reduction outputs with cute arrows and labels'''
+    _, ax = plt.subplots(1, figsize=figsize)
+    sns.scatterplot(data[:,0], data[:,1], s=pt_size, alpha=0.7, hue=color, legend=legend, edgecolor='none')
+
+    plt.xlabel('{} 1'.format(dim_name), fontsize=14)
+    ax.xaxis.set_label_coords(0.2, -0.025)
+    plt.ylabel('{} 2'.format(dim_name), fontsize=14)
+    ax.yaxis.set_label_coords(-0.025, 0.2)
+
+    plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+    plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+
+    plt.tick_params(labelbottom=False, labelleft=False)
+    sns.despine(left=True, bottom=True)
+    if legend is not None:
+        plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
+    plt.tight_layout()
+
+    if save_to is None:
+        plt.show()
+    else:
+        plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
+        
+    plt.close()
+
+
+# fuzzy-lasagna functions
 def threshold(mat, thresh=0.5, dir='above'):
     '''replace all values in a matrix above or below a given threshold with np.nan'''
     a = np.ma.array(mat, copy=True)
@@ -62,6 +154,7 @@ def bin_threshold(mat, threshmin=None, threshmax=0.5):
     return a
 
 
+# furry-couscous manuscript functions
 def distance_stats(pre, post):
     '''
     Test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.

@@ -429,35 +429,13 @@ class couscous():
             
         plotter = np.ascontiguousarray(self.data[data_type]) # coerce data to np array for plotting
 
-        _, ax = plt.subplots(1, figsize=figsize)
-        sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.7, hue=color, legend=legend, edgecolor='none')
-
         if data_type == 'PCA':
             dim_name = 'PC'
 
         else:
             dim_name = data_type
 
-        plt.xlabel('{} 1'.format(dim_name), fontsize=14)
-        ax.xaxis.set_label_coords(0.2, -0.025)
-        plt.ylabel('{} 2'.format(dim_name), fontsize=14)
-        ax.yaxis.set_label_coords(-0.025, 0.2)
-
-        plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
-        plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
-
-        plt.tick_params(labelbottom=False, labelleft=False)
-        sns.despine(left=True, bottom=True)
-        if legend is not None:
-            plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
-        plt.tight_layout()
-
-        if save_to is None:
-            plt.show()
-        else:
-            plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
-
-        plt.close()
+        plot_DR(data=plotter, color=color, pt_size=75, dim_name=dim_name, figsize=figsize, legend=legend, save_to=save_to)
 
 
     def plot_barcodes(self, data_type, ranks='all', legend=None, save_to=None, figsize=(5,5)):
