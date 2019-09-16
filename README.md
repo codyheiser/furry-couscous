@@ -20,7 +20,3 @@ Consult `fcc_classes_tutorial.ipynb` for info on how to create and manipulate _c
 
 Example datasets used can be found in `inputs/`.  
 
----
-#### Optional Packages
-
-For feature selection using neighborhood variance ratio, install [__NVR__ from GitHub](https://github.com/KenLauLab/NVR).  
