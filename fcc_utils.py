@@ -60,6 +60,7 @@ def recipe_fcc(adata, mito_names='MT-'):
     # obs/var
     adata.var['mito'] = adata.var_names.str.contains(mito_names) # identify mitochondrial genes
     sc.pp.calculate_qc_metrics(adata, qc_vars=['mito'], inplace=True) # calculate standard qc .obs and .var
+    adata.obs['ranked_total_counts'] = np.argsort(adata.obs['total_counts']) # rank cells by total counts
 
     # gf-icf
     gf_icf(adata) # add gf-icf scores to adata.layers['gf-icf']
