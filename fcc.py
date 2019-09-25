@@ -276,7 +276,7 @@ class couscous():
 
         self.PCA_fit = PCA(n_components=n_components).fit(transformed) # fit PCA to data
         self.data['PCA'] = self.PCA_fit.transform(transformed) # transform data to PCA space and save in data attribute
-        self.clu['PCA'] = Cluster(self.data['PCA'], autoplot=False) # perform DPC on PCA results
+        self.clu['PCA'] = Cluster(self.data['PCA'].astype('double'), autoplot=False) # perform DPC on PCA results
 
 
     def fcc_tSNE(self, perplexity, data_type='counts', transform=None, seed=None, **kwargs):
