@@ -1,7 +1,7 @@
 # utility functions
 
 # @author: C Heiser
-# Sep 2019
+# September 2019
 
 # basics
 import numpy as np
@@ -350,6 +350,58 @@ def cluster_arrangement(pre_obj, post_obj, pre_type, post_type, clusters, cluste
     post_0_1 = post_obj.barcode_distance_matrix(data_type=post_type, ranks=[clusters[0],clusters[1]]).flatten()
     post_0_2 = post_obj.barcode_distance_matrix(data_type=post_type, ranks=[clusters[0],clusters[2]]).flatten()
     post_1_2 = post_obj.barcode_distance_matrix(data_type=post_type, ranks=[clusters[1],clusters[2]]).flatten()
+    post = np.append(np.append(post_0_1,post_0_2), post_1_2)
+    post_norm = (post-post.min())/(post.max()-post.min())
+    post_norm_0_1 = post_norm[:post_0_1.shape[0]]
+    post_norm_0_2 = post_norm[post_0_1.shape[0]:post_0_1.shape[0]+post_0_2.shape[0]]
+    post_norm_1_2 = post_norm[post_0_1.shape[0]+post_0_2.shape[0]:]
+
+    # calculate EMD and Pearson correlation stats
+    EMD = [scipy.stats.wasserstein_distance(dist_norm_0_1, post_norm_0_1), scipy.stats.wasserstein_distance(dist_norm_0_2, post_norm_0_2), scipy.stats.wasserstein_distance(dist_norm_1_2, post_norm_1_2)]
+    corr_stats = [scipy.stats.pearsonr(x=dist_0_1, y=post_0_1)[0], scipy.stats.pearsonr(x=dist_0_2, y=post_0_2)[0], scipy.stats.pearsonr(x=dist_1_2, y=post_1_2)[0]]
+
+    # generate jointplot
+    g = sns.JointGrid(x=dist_norm, y=post_norm, space=0, height=figsize[0])
+    g.plot_joint(plt.hist2d, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
+    sns.kdeplot(dist_norm_0_1, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkorange', label=cluster_names[0]+' - '+cluster_names[1], legend=legend)
+    sns.kdeplot(dist_norm_0_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkgreen', label=cluster_names[0]+' - '+cluster_names[2], legend=legend)
+    sns.kdeplot(dist_norm_1_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkred', label=cluster_names[1]+' - '+cluster_names[2], legend=legend)
+    if legend:
+        g.ax_marg_x.legend(loc=(1.01,0.1))
+    sns.kdeplot(post_norm_0_1, shade=False, bw=0.01, vertical=True,  color='darkorange', ax=g.ax_marg_y)
+    sns.kdeplot(post_norm_0_2, shade=False, bw=0.01, vertical=True,  color='darkgreen', ax=g.ax_marg_y)
+    sns.kdeplot(post_norm_1_2, shade=False, bw=0.01, vertical=True,  color='darkred', ax=g.ax_marg_y)
+    g.ax_joint.plot(np.linspace(max(min(dist_norm),min(post_norm)),1,100), np.linspace(max(min(dist_norm),min(post_norm)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
+    plt.xlabel('Pre-Transformation', fontsize=14)
+    plt.ylabel('Post-Transformation', fontsize=14)
+    plt.tick_params(labelleft=False, labelbottom=False)
+
+    return EMD, corr_stats
+
+
+def cluster_arrangement_general(pre, post, cluster_names, figsize=(6,6), legend=True):
+    '''
+    pre = list of three (3) matrices
+    post = list of three (3) matrices
+    cluster_names = list of cluster names for labeling i.e. ['Bipolar Cells','Rods','Amacrine Cells'] for clusters 0, 1 and 2, respectively
+    figsize = size of output figure to plot
+    pre_transform = apply transformation to pre_obj counts? (None, 'arcsinh', or 'log2')
+    legend = show legend on plot
+    '''
+    # distance calculations for pre_obj
+    dist_0_1 = scipy.spatial.distance_matrix(pre[0], pre[1]).flatten()
+    dist_0_2 = scipy.spatial.distance_matrix(pre[0], pre[2]).flatten()
+    dist_1_2 = scipy.spatial.distance_matrix(pre[1], pre[2]).flatten()
+    dist = np.append(np.append(dist_0_1,dist_0_2), dist_1_2)
+    dist_norm = (dist-dist.min())/(dist.max()-dist.min())
+    dist_norm_0_1 = dist_norm[:dist_0_1.shape[0]]
+    dist_norm_0_2 = dist_norm[dist_0_1.shape[0]:dist_0_1.shape[0]+dist_0_2.shape[0]]
+    dist_norm_1_2 = dist_norm[dist_0_1.shape[0]+dist_0_2.shape[0]:]
+
+    # distance calculations for post_obj
+    post_0_1 = scipy.spatial.distance_matrix(pre[0], pre[1]).flatten()
+    post_0_2 = scipy.spatial.distance_matrix(pre[0], pre[2]).flatten()
+    post_1_2 = scipy.spatial.distance_matrix(pre[1], pre[2]).flatten()
     post = np.append(np.append(post_0_1,post_0_2), post_1_2)
     post_norm = (post-post.min())/(post.max()-post.min())
     post_norm_0_1 = post_norm[:post_0_1.shape[0]]
