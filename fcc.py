@@ -1,8 +1,7 @@
 # scRNA-seq analysis and slide-seq fusion objects
 
 # @author: C Heiser
-# August 2019
-
+# September 2019
 
 # basic utilities and plotting
 from fcc_utils import *
@@ -16,6 +15,8 @@ from sklearn.neighbors import kneighbors_graph  # K-nearest neighbors graph
 from sklearn.metrics import silhouette_score    # silhouette score
 # density peak clustering
 from pydpc import Cluster                       # density-peak clustering
+# NVR feature selection
+import nvr
 # other DR methods
 from umap import UMAP                           # UMAP
 
@@ -94,12 +95,12 @@ class couscous():
         return out[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed counts array
 
 
-    def log2_norm(self, data_type='counts', norm='l1', ranks='all'):
+    def log_norm(self, data_type='counts', norm='l1', ranks='all'):
         '''
-        Perform a log2-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
+        Perform a natural log-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
         Useful for feeding into PCA or tSNE.
             data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing data to normalize
-            norm = normalization strategy prior to Log2 transorm.
+            norm = normalization strategy prior to log1p transorm.
                 None: do not normalize data
                 'l1': divide each feature by sum of features for each cell
                 'l2': divide each feature by sqrt of sum of squares of features for cell.
@@ -107,10 +108,10 @@ class couscous():
                 or names of barcode IDs (strings, i.e. ['0','1','2'] for barcodes with numbered IDs)
         '''
         if not norm:
-            out = np.log2(np.ascontiguousarray(self.data[data_type]) + 1) # add pseudocount of 1 to avoid log(0)
+            out = np.log1p(np.ascontiguousarray(self.data[data_type])) # add pseudocount of 1 to avoid log(0)
 
         else:
-            out = np.log2(normalize(np.ascontiguousarray(self.data[data_type]), axis=1, norm=norm) + 1) # add pseudocount of 1 to avoid log(0)
+            out = np.log1p(normalize(np.ascontiguousarray(self.data[data_type]), axis=1, norm=norm)) # add pseudocount of 1 to avoid log(0)
 
         if ranks=='all':
             return out
@@ -166,7 +167,7 @@ class couscous():
         '''
         calculate Euclidean distances between cells in matrix of shape (n_cells, n_cells)
             data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to calculate distances in
-            transform = how to normalize and transform data prior to calculating distances (None, "arcsinh", or "log2")
+            transform = how to normalize and transform data prior to calculating distances (None, "arcsinh", or "log1p")
             ranks = which barcodes to return distances for. Can be list of ranks of most abundant barcodes (integers, i.e. [1,2,3] for top 3 barcodes),
                 or names of barcode IDs (strings, i.e. ['0','1','2'] for barcodes with numbered IDs)
             **kwargs = keyword arguments to pass to normalization functions
@@ -178,8 +179,8 @@ class couscous():
         elif transform == 'arcsinh':
             transformed = self.arcsinh_norm(data_type=data_type, **kwargs)
 
-        elif transform == 'log2':
-            transformed = self.log2_norm(data_type=data_type, **kwargs)
+        elif transform == 'log1p':
+            transformed = self.log_norm(data_type=data_type, **kwargs)
 
         elif transform == 'gficf':
             transformed = self.gficf_norm(data_type=data_type, **kwargs)
@@ -205,7 +206,7 @@ class couscous():
             ranks = which TWO barcodes to calculate distances between. List of ranks of most abundant barcodes (integers, i.e. [1,2] for top 2 barcodes),
                 or names of barcode IDs (strings, i.e. ['0','2'] for barcodes with numbered IDs)
             data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to calculate distances in
-            transform = how to normalize and transform data prior to calculating distances (None, "arcsinh", or "log2")
+            transform = how to normalize and transform data prior to calculating distances (None, "arcsinh", or "log1p")
             **kwargs = keyword arguments to pass to normalization functions
         '''
         assert self.barcodes is not None, 'Barcodes not assigned.\n'
@@ -217,8 +218,8 @@ class couscous():
         elif transform == 'arcsinh':
             transformed = self.arcsinh_norm(data_type=data_type, **kwargs)
 
-        elif transform == 'log2':
-            transformed = self.log2_norm(data_type=data_type, **kwargs)
+        elif transform == 'log1p':
+            transformed = self.log_norm(data_type=data_type, **kwargs)
 
         elif transform == 'gficf':
             transformed = self.gficf_norm(data_type=data_type, **kwargs)
@@ -258,7 +259,7 @@ class couscous():
         '''
         principal component analysis
             data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to perform PCA on
-            transform = how to normalize and transform data prior to reducing dimension (None, "arcsinh", or "log2")
+            transform = how to normalize and transform data prior to reducing dimension (None, "arcsinh", or "log1p")
             **kwargs = keyword arguments to pass to normalization functions
         '''
         # transform data first, if necessary
@@ -268,8 +269,8 @@ class couscous():
         if transform == 'arcsinh':
             transformed = self.arcsinh_norm(data_type=data_type, **kwargs)
 
-        elif transform == 'log2':
-            transformed = self.log2_norm(data_type=data_type, **kwargs)
+        elif transform == 'log1p':
+            transformed = self.log_norm(data_type=data_type, **kwargs)
 
         elif transform == 'gficf':
             transformed = self.gficf_norm(data_type=data_type, **kwargs)
@@ -284,7 +285,7 @@ class couscous():
         t-distributed stochastic neighbor embedding
             perplexity = value of nearest neighbors to attract one another in optimization
             data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to perform t-SNE on
-            transform = how to normalize and transform data prior to reducing dimension (None, "arcsinh", or "log2")
+            transform = how to normalize and transform data prior to reducing dimension (None, "arcsinh", or "log1p")
             seed = random state to initialize t-SNE for reproducibility
             **kwargs = keyword arguments to pass to normalization functions
         '''
@@ -295,8 +296,8 @@ class couscous():
         elif transform == 'arcsinh':
             transformed = self.arcsinh_norm(data_type=data_type, **kwargs)
 
-        elif transform == 'log2':
-            transformed = self.log2_norm(data_type=data_type, **kwargs)
+        elif transform == 'log1p':
+            transformed = self.log_norm(data_type=data_type, **kwargs)
 
         elif transform == 'gficf':
             transformed = self.gficf_norm(data_type=data_type, **kwargs)
@@ -311,7 +312,7 @@ class couscous():
         uniform manifold approximation and projection
             perplexity = value of nearest neighbors to attract one another in optimization
             data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to perform UMAP on
-            transform = how to normalize and transform data prior to reducing dimension (None, "arcsinh", or "log2")
+            transform = how to normalize and transform data prior to reducing dimension (None, "arcsinh", or "log1p")
             seed = random state to initialize UMAP for reproducibility
             **kwargs = keyword arguments to pass to normalization functions
         '''
@@ -322,8 +323,8 @@ class couscous():
         elif transform == 'arcsinh':
             transformed = self.arcsinh_norm(data_type=data_type, **kwargs)
 
-        elif transform == 'log2':
-            transformed = self.log2_norm(data_type=data_type, **kwargs)
+        elif transform == 'log1p':
+            transformed = self.log_norm(data_type=data_type, **kwargs)
 
         elif transform == 'gficf':
             transformed = self.gficf_norm(data_type=data_type, **kwargs)
@@ -378,18 +379,18 @@ class couscous():
         fig.tight_layout()
 
 
-    def plot(self, data_type, color=None, feature_type='counts', features='total', transform='arcsinh', legend=None, save_to=None, figsize=(5,5), **kwargs):
+    def plot(self, data_type, color=None, feature_type='counts', features='total', transform='arcsinh', pt_size=75, legend=None, save_to=None, figsize=(5,5), **kwargs):
         '''
         standard plot of first 2 dimensions of latent space
             data_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to plot
             color = vector of values to color points by. Default coloring is by point density.
             feature_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to overlay feature intensities from. Default 'counts' to plot gene expression.
             features = list of names or indices of features to cast onto plot. Default 'total' to sum all features in feature_type space for each cell.
-            transform = transform data before generating feature image. One of ['arcsinh','log2',None].
+            transform = transform data before generating feature image. One of ['arcsinh','log1p','gficf',None].
             legend = one of ['brief', 'full', None] describing what kind of legend to show
             save_to = path to .png file to save plot to
             figsize = size in inches of output figure
-            **kwargs = additional arguments to pass to arcsinh_norm or log2_norm methods.
+            **kwargs = additional arguments to pass to arcsinh_norm or log_norm methods.
         '''
         # determine how to display results
         # if no color vector or list of features is given, use point density
@@ -404,8 +405,11 @@ class couscous():
             elif transform == 'arcsinh':
                 mapper = pd.DataFrame(self.arcsinh_norm(data_type=feature_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
 
-            elif transform == 'log2':
-                mapper = pd.DataFrame(self.log2_norm(data_type=feature_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+            elif transform == 'log1p':
+                mapper = pd.DataFrame(self.log_norm(data_type=feature_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+
+            elif transform == 'gficf':
+                mapper = pd.DataFrame(self.gficf_norm(data_type=feature_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
 
             # if user wants total of all features (UMI count), sum them up
             if features == 'total':
@@ -435,10 +439,10 @@ class couscous():
         else:
             dim_name = data_type
 
-        plot_DR(data=plotter, color=color, pt_size=75, dim_name=dim_name, figsize=figsize, legend=legend, save_to=save_to)
+        plot_DR(data=plotter, color=color, pt_size=pt_size, dim_name=dim_name, figsize=figsize, legend=legend, save_to=save_to)
 
 
-    def plot_barcodes(self, data_type, ranks='all', legend=None, save_to=None, figsize=(5,5)):
+    def plot_barcodes(self, data_type, ranks='all', pt_size=75, legend=None, save_to=None, figsize=(5,5)):
         '''
         standard plot of first 2 dimensions of latent space, colored by barcodes
             data_type = one of ['PCA', 't-SNE', 'UMAP'] describing space to plot
@@ -454,7 +458,7 @@ class couscous():
         _, ax = plt.subplots(1, figsize=figsize)
 
         if ranks == 'all':
-            sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=legend, edgecolor='none', palette='plasma')
+            sns.scatterplot(plotter[:,0], plotter[:,1], s=pt_size, alpha=0.7, hue=self.barcodes, legend=legend, edgecolor='none', palette='plasma')
 
         else:
             ints = [x for x in ranks if type(x)==int] # pull out rank values
@@ -462,8 +466,8 @@ class couscous():
             ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
             ranks_codes = self.barcodes[self.barcodes.isin(list(ranks_i) + IDs)] # subset barcodes series
             ranks_results = plotter[self.barcodes.isin(list(ranks_i) + IDs)] # subset results array
-            sns.scatterplot(plotter[:,0], plotter[:,1], s=75, alpha=0.1, color='gray', legend=False, edgecolor='none')
-            sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=75, alpha=0.7, hue=ranks_codes, edgecolor='none', palette='plasma')
+            sns.scatterplot(plotter[:,0], plotter[:,1], s=pt_size, alpha=0.1, color='gray', legend=False, edgecolor='none')
+            sns.scatterplot(ranks_results[:,0], ranks_results[:,1], s=pt_size, alpha=0.7, hue=ranks_codes, edgecolor='none', palette='plasma')
 
         if data_type == 'PCA':
             dim_name = 'PC'
@@ -493,7 +497,7 @@ class couscous():
         plt.close()
 
 
-    def plot_PCA(self, color=None, save_to=None, figsize=(10,5)):
+    def plot_PCA(self, color=None, pt_size=75, save_to=None, figsize=(10,5)):
         '''PCA plot including variance contribution per component'''
         assert self.data['PCA'] is not None, 'PCA not performed.\n'
 
@@ -502,7 +506,7 @@ class couscous():
         plt.figure(figsize=figsize)
 
         plt.subplot(121)
-        sns.scatterplot(x=self.data['PCA'][:,0], y=self.data['PCA'][:,1], s=75, alpha=0.7, hue=color, legend=None, edgecolor='none')
+        sns.scatterplot(x=self.data['PCA'][:,0], y=self.data['PCA'][:,1], s=pt_size, alpha=0.7, hue=color, legend=None, edgecolor='none')
         plt.tick_params(labelbottom=False, labelleft=False)
         plt.xlabel('PC 1', fontsize=14)
         plt.ylabel('PC 2', fontsize=14)
@@ -790,7 +794,7 @@ class pita(couscous):
         cast feature into pixel space to construct gene expression image
             feature_type = one of ['counts','PCA','t-SNE','UMAP'] describing data to pull features from
             features = list of names or indices of feature to cast onto bead image
-            transform = transform data before generating feature image. One of ['arcsinh','log2',None].
+            transform = transform data before generating feature image. One of ['arcsinh','log1p','gficf',None].
             trimmed = show pixel map output from trim_pixels(), or uncropped map?
             plot_out = show resulting image?
             **kwargs = arguments to pass to show_pita() function
@@ -800,10 +804,13 @@ class pita(couscous):
             mapper = pd.DataFrame(self.data[feature_type], index=self.data['counts'].index) # coerce to pd.DF with bead ID index
 
         if transform == 'arcsinh':
-            mapper = pd.DataFrame(self.arcsinh_norm(data_type=feature_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+            mapper = pd.DataFrame(self.arcsinh_norm(data_type=feature_type), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
 
-        elif transform == 'log2':
-            mapper = pd.DataFrame(self.log2_norm(data_type=feature_type, **kwargs), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+        elif transform == 'log1p':
+            mapper = pd.DataFrame(self.log_norm(data_type=feature_type), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
+
+        elif transform == 'gficf':
+            mapper = pd.DataFrame(self.gficf_norm(data_type=feature_type), index=self.data['counts'].index) # coerce to pd.DF with bead ID index
 
         # determine which reference pixel map to use
         if trimmed:
