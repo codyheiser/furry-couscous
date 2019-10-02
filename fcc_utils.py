@@ -20,23 +20,35 @@ import seaborn as sns; sns.set(style = 'white')
 # scanpy functions
 def reorder_adata(adata, descending = True):
     '''place cells in descending order of total counts'''
-    if(descending==True):
+    if(descending):
         new_order = np.argsort(adata.X.sum(axis=1))[::-1]
-    elif(descending==False):
+    elif(not descending):
         new_order = np.argsort(adata.X.sum(axis=1))[:]
     adata.X = adata.X[new_order,:].copy()
     adata.obs = adata.obs.iloc[new_order].copy()
 
 
-def gf_icf(adata):
-    '''return GF-ICF scores for each element in anndata counts matrix'''
-    tf = adata.X.T / adata.X.sum(axis=1)
-    tf = tf.T
-    
-    ni = adata.X.astype(bool).sum(axis=0)
+def gf_icf(adata, layer=None):
+    '''
+    return GF-ICF scores for each element in anndata counts matrix
+        adata = AnnData object
+        layer = name of layer to perform GF-ICF normalization on. if None, use AnnData.X
+    '''
+    if layer is None:
+        tf = adata.X.T / adata.X.sum(axis=1)
+        tf = tf.T
+        ni = adata.X.astype(bool).sum(axis=0)
+        
+        layer = 'X' # set input layer for naming output layer
+
+    else:
+        tf = adata.layers[layer].T / adata.layers[layer].sum(axis=1)
+        tf = tf.T
+        ni = adata.layers[layer].astype(bool).sum(axis=0)
+        
     idf = np.log(adata.n_obs / (ni+1))
     
-    adata.layers['gf-icf'] = tf*idf
+    adata.layers['{}_gf-icf'.format(layer)] = tf*idf
 
 
 def recipe_fcc(adata, mito_names='MT-'):
@@ -48,7 +60,7 @@ def recipe_fcc(adata, mito_names='MT-'):
     -calculates useful .obs and .var columns ('total_counts', 'pct_counts_mito', 'n_genes_by_counts', etc.)
     -orders cells by total counts
     -stores raw counts (adata.raw.X)
-    -provides GF-ICF normalization (adata.layers['gf-icf'])
+    -provides GF-ICF normalization (adata.layers['X_gf-icf'])
     -normalization and log1p transformation of counts (adata.X)
     -identifies highly-variable genes using seurat method (adata.var['highly_variable'])
     '''
@@ -63,10 +75,10 @@ def recipe_fcc(adata, mito_names='MT-'):
     adata.obs['ranked_total_counts'] = np.argsort(adata.obs['total_counts']) # rank cells by total counts
 
     # gf-icf
-    gf_icf(adata) # add gf-icf scores to adata.layers['gf-icf']
+    gf_icf(adata, layer=None) # add gf-icf scores to adata.layers['gf-icf']
 
     # normalize/transform
-    sc.pp.normalize_total(adata, target_sum=10000, layers='all', layer_norm='after', key_added='norm_factor')
+    sc.pp.normalize_total(adata, target_sum=10000, layers=None, layer_norm=None, key_added='norm_factor')
     sc.pp.log1p(adata) # log1p transform counts
 
     # HVGs

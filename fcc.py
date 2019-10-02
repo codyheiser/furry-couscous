@@ -16,7 +16,7 @@ from sklearn.metrics import silhouette_score    # silhouette score
 # density peak clustering
 from pydpc import Cluster                       # density-peak clustering
 # NVR feature selection
-import nvr
+#import nvr
 # other DR methods
 from umap import UMAP                           # UMAP
 
