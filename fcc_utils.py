@@ -1,7 +1,7 @@
 # utility functions
 
 # @author: C Heiser
-# September 2019
+# October 2019
 
 # basics
 import numpy as np
@@ -11,7 +11,6 @@ import scanpy as sc
 # scikit packages
 from skbio.stats.distance import mantel					# Mantel test for correlation of symmetric distance matrices
 # plotting packages
-import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns; sns.set(style = 'white')
 
@@ -26,6 +25,22 @@ def reorder_adata(adata, descending = True):
         new_order = np.argsort(adata.X.sum(axis=1))[:]
     adata.X = adata.X[new_order,:].copy()
     adata.obs = adata.obs.iloc[new_order].copy()
+
+
+def arcsinh(adata, layer=None, scale=1000):
+    '''
+    return arcsinh-normalized values for each element in anndata counts matrix
+    l1 normalization (sc.pp.normalize_total) should be performed before this transformation
+        adata = AnnData object
+        layer = name of lauer to perform arcsinh-normalization on. if None, use AnnData.X
+        scale = factor to scale normalized counts to; default 1000
+    '''
+    if layer is None:
+        mat = adata.X
+    else:
+        mat = adata.layers[layer]
+
+    adata.layers['arcsinh_norm'] = np.arcsinh(mat * scale)
 
 
 def gf_icf(adata, layer=None):
