@@ -38,7 +38,7 @@ except ImportError:
 
 # DCA
 try:
-	import scanpy.api as scanpy					# DCA
+	import scanpy					# DCA
 except ImportError:
 	print('Scanpy module not detected. DCA Functionality will be disabled.')
 
