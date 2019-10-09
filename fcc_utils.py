@@ -1,20 +1,21 @@
 # utility functions
 
 # @author: C Heiser
-# September 2019
+# October 2019
 
 # basics
 import numpy as np
 import pandas as pd
-import scipy
 import scanpy as sc
+# scipy functions
+from scipy.stats import pearsonr, wasserstein_distance
+from scipy.spatial import distance_matrix
 # scikit packages
+from sklearn.neighbors import kneighbors_graph          # simple K-nearest neighbors graph
 from skbio.stats.distance import mantel					# Mantel test for correlation of symmetric distance matrices
 # plotting packages
-import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns; sns.set(style = 'white')
-
 
 
 # scanpy functions
@@ -26,6 +27,22 @@ def reorder_adata(adata, descending = True):
         new_order = np.argsort(adata.X.sum(axis=1))[:]
     adata.X = adata.X[new_order,:].copy()
     adata.obs = adata.obs.iloc[new_order].copy()
+
+
+def arcsinh(adata, layer=None, scale=1000):
+    '''
+    return arcsinh-normalized values for each element in anndata counts matrix
+    l1 normalization (sc.pp.normalize_total) should be performed before this transformation
+        adata = AnnData object
+        layer = name of lauer to perform arcsinh-normalization on. if None, use AnnData.X
+        scale = factor to scale normalized counts to; default 1000
+    '''
+    if layer is None:
+        mat = adata.X
+    else:
+        mat = adata.layers[layer]
+
+    adata.layers['arcsinh_norm'] = np.arcsinh(mat * scale)
 
 
 def gf_icf(adata, layer=None):
@@ -49,6 +66,32 @@ def gf_icf(adata, layer=None):
     idf = np.log(adata.n_obs / (ni+1))
     
     adata.layers['{}_gf-icf'.format(layer)] = tf*idf
+
+
+def knn_graph(dist_matrix, k, adata, save_rep='knn'):
+    '''
+    build simple binary k-nearest neighbor graph and add to anndata object
+        dist_matrix = distance matrix to calculate knn graph for (i.e. distance_matrix(adata.obsm['X_pca'], adata.obsm['X_pca']))
+        k = number of nearest neighbors to determine
+        adata = AnnData object to add resulting graph to (in .uns slot)
+        save_rep = name of .uns key to save knn graph to within adata (default adata.uns['knn'])
+    '''
+    adata.uns[save_rep] = kneighbors_graph(dist_matrix, k, mode='connectivity', include_self=False).toarray()
+
+
+def subset_uns_by_ID(adata, uns_keys, obs_col, IDs):
+    '''
+    subset symmetrical distance matrices and knn graphs in adata.uns by one or more IDs defined in adata.obs
+        adata = AnnData object 
+        uns_keys = list of keys in adata.uns to subset. new adata.uns keys will be saved with ID appended to name (i.e. adata.uns['knn'] -> adata.uns['knn_ID1'])
+        obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
+        IDs = list of IDs to include in subset
+    '''
+    for key in uns_keys:
+        tmp = adata.uns[key][adata.obs[obs_col].isin(IDs),:] # subset symmetrical uns matrix along axis 0
+        tmp = tmp[:, adata.obs[obs_col].isin(IDs)] # subset symmetrical uns matrix along axis 1
+
+        adata.uns['{}_{}'.format(key, '_'.join([str(x) for x in IDs]))] = tmp # save new .uns key by appending IDs to original key name
 
 
 def recipe_fcc(adata, mito_names='MT-'):
@@ -104,7 +147,16 @@ def gf_icf_markers(adata, n_genes=5, group_by='louvain'):
 
 
 def plot_DR(data, color, pt_size=75, dim_name='dim', figsize=(5,5), legend=None, save_to=None):
-    '''general plotting function for dimensionality reduction outputs with cute arrows and labels'''
+    '''
+    general plotting function for dimensionality reduction outputs with cute arrows and labels
+        data = np.array containing variables in columns and observations in rows
+        color = list of length nrow(data) to determine how points should be colored
+        pt_size = size of points in plot
+        dim_name = how to label axes ('dim 1' on x and 'dim 2' on y by default)
+        figsize = size of resulting axes
+        legend = None, 'full', or 'brief'
+        save_to = path to .png file to save output, or None
+    '''
     _, ax = plt.subplots(1, figsize=figsize)
     sns.scatterplot(data[:,0], data[:,1], s=pt_size, alpha=0.7, hue=color, legend=legend, edgecolor='none')
 
@@ -127,6 +179,52 @@ def plot_DR(data, color, pt_size=75, dim_name='dim', figsize=(5,5), legend=None,
     else:
         plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
         
+    plt.close()
+
+
+def plot_IDs(adata, use_rep, obs_col, IDs='all', pt_size=75, dim_name='dim', figsize=(5,5), legend=None, save_to=None):
+    '''
+    general plotting function for dimensionality reduction outputs with cute arrows and labels
+        adata = anndata object to pull dimensionality reduction from
+        use_rep = adata.obsm key to plot from (i.e. 'X_pca')
+        obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
+        IDs = list of IDs to plot, graying out cells not assigned to those IDS (default 'all' IDs)
+        pt_size = size of points in plot
+        dim_name = how to label axes ('dim 1' on x and 'dim 2' on y by default)
+        figsize = size of resulting axes
+        legend = None, 'full', or 'brief'
+        save_to = path to .png file to save output, or None
+    '''
+    plotter = adata.obsm[use_rep]
+
+    _, ax = plt.subplots(1, figsize=figsize)
+
+    if IDs == 'all':
+        sns.scatterplot(plotter[:,0], plotter[:,1], s=pt_size, alpha=0.7, hue=adata.obs[obs_col], legend=legend, edgecolor='none', palette='plasma')
+
+    else:
+        sns.scatterplot(plotter[-adata.obs[obs_col].isin(IDs), 0], plotter[-adata.obs[obs_col].isin(IDs), 1], s=pt_size, alpha=0.1, color='gray', legend=False, edgecolor='none')
+        sns.scatterplot(plotter[adata.obs[obs_col].isin(IDs), 0], plotter[adata.obs[obs_col].isin(IDs), 1], s=pt_size, alpha=0.7, hue=adata.obs.loc[adata.obs[obs_col].isin(IDs), obs_col], legend=legend, edgecolor='none', palette='plasma')
+
+    plt.xlabel('{} 1'.format(dim_name), fontsize=14)
+    ax.xaxis.set_label_coords(0.2, -0.025)
+    plt.ylabel('{} 2'.format(dim_name), fontsize=14)
+    ax.yaxis.set_label_coords(-0.025, 0.2)
+
+    plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+    plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+
+    plt.tick_params(labelbottom=False, labelleft=False)
+    sns.despine(left=True, bottom=True)
+    if legend is not None:
+        plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
+    plt.tight_layout()
+
+    if save_to is None:
+        plt.show()
+    else:
+        plt.savefig(fname=save_to, transparent=True, bbox_inches='tight')
+
     plt.close()
 
 
@@ -193,14 +291,14 @@ def distance_stats(pre, post):
         post_flat = post.flatten()
 
         # calculate correlation coefficient using Pearson correlation
-        corr_stats = scipy.stats.pearsonr(x=pre_flat, y=post_flat)
+        corr_stats = pearsonr(x=pre_flat, y=post_flat)
 
     # normalize flattened distances by z-score within each set for fair comparison of probability distributions
     pre_flat_norm = (pre_flat-pre_flat.min())/(pre_flat.max()-pre_flat.min())
     post_flat_norm = (post_flat-post_flat.min())/(post_flat.max()-post_flat.min())
 
     # calculate EMD for the distance matrices
-    EMD = scipy.stats.wasserstein_distance(pre_flat_norm, post_flat_norm)
+    EMD = wasserstein_distance(pre_flat_norm, post_flat_norm)
 
     return pre_flat_norm, post_flat_norm, corr_stats, EMD
 
@@ -336,22 +434,22 @@ def knn_preservation(pre, post):
     return np.round(((pre == post).sum()/pre.shape[0]**2)*100, 4)
 
 
-def cluster_arrangement(pre_obj, post_obj, pre_type, post_type, clusters, cluster_names, figsize=(6,6), pre_transform='arcsinh', legend=True):
+def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,6), legend=True):
     '''
-    pre_obj = RNA_counts object
-    post_obj = DR object
-    pre_type =
-    post_type =
-    clusters = list of barcode IDs i.e. ['0','1','2'] to calculate pairwise distances between clusters 0, 1 and 2
-    cluster_names = list of cluster names for labeling i.e. ['Bipolar Cells','Rods','Amacrine Cells'] for clusters 0, 1 and 2, respectively
-    figsize = size of output figure to plot
-    pre_transform = apply transformation to pre_obj counts? (None, 'arcsinh', or 'log2')
-    legend = show legend on plot
+    determine pairwise distance preservation between 3 IDs from adata.obs[obs_col]
+        adata = anndata object to pull dimensionality reduction from
+        pre = matrix to subset as pre-transformation (i.e. adata.X)
+        post = matrix to subset as pre-transformation (i.e. adata.obsm['X_pca'])
+        obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
+        IDs = list of THREE IDs to compare (i.e. [0,1,2])
+        figsize = size of resulting axes
+        legend = None, 'full', or 'brief'
+        save_to = path to .png file to save output, or None
     '''
     # distance calculations for pre_obj
-    dist_0_1 = pre_obj.barcode_distance_matrix(data_type=pre_type, ranks=[clusters[0],clusters[1]], transform=pre_transform).flatten()
-    dist_0_2 = pre_obj.barcode_distance_matrix(data_type=pre_type, ranks=[clusters[0],clusters[2]], transform=pre_transform).flatten()
-    dist_1_2 = pre_obj.barcode_distance_matrix(data_type=pre_type, ranks=[clusters[1],clusters[2]], transform=pre_transform).flatten()
+    dist_0_1 = distance_matrix(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[1]]).flatten()
+    dist_0_2 = distance_matrix(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[2]]).flatten()
+    dist_1_2 = distance_matrix(pre[adata.obs[obs_col]==IDs[1]], pre[adata.obs[obs_col]==IDs[2]]).flatten()
     dist = np.append(np.append(dist_0_1,dist_0_2), dist_1_2)
     dist_norm = (dist-dist.min())/(dist.max()-dist.min())
     dist_norm_0_1 = dist_norm[:dist_0_1.shape[0]]
@@ -359,9 +457,9 @@ def cluster_arrangement(pre_obj, post_obj, pre_type, post_type, clusters, cluste
     dist_norm_1_2 = dist_norm[dist_0_1.shape[0]+dist_0_2.shape[0]:]
 
     # distance calculations for post_obj
-    post_0_1 = post_obj.barcode_distance_matrix(data_type=post_type, ranks=[clusters[0],clusters[1]]).flatten()
-    post_0_2 = post_obj.barcode_distance_matrix(data_type=post_type, ranks=[clusters[0],clusters[2]]).flatten()
-    post_1_2 = post_obj.barcode_distance_matrix(data_type=post_type, ranks=[clusters[1],clusters[2]]).flatten()
+    post_0_1 = distance_matrix(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[1]]).flatten()
+    post_0_2 = distance_matrix(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[2]]).flatten()
+    post_1_2 = distance_matrix(post[adata.obs[obs_col]==IDs[1]], post[adata.obs[obs_col]==IDs[2]]).flatten()
     post = np.append(np.append(post_0_1,post_0_2), post_1_2)
     post_norm = (post-post.min())/(post.max()-post.min())
     post_norm_0_1 = post_norm[:post_0_1.shape[0]]
@@ -369,67 +467,15 @@ def cluster_arrangement(pre_obj, post_obj, pre_type, post_type, clusters, cluste
     post_norm_1_2 = post_norm[post_0_1.shape[0]+post_0_2.shape[0]:]
 
     # calculate EMD and Pearson correlation stats
-    EMD = [scipy.stats.wasserstein_distance(dist_norm_0_1, post_norm_0_1), scipy.stats.wasserstein_distance(dist_norm_0_2, post_norm_0_2), scipy.stats.wasserstein_distance(dist_norm_1_2, post_norm_1_2)]
-    corr_stats = [scipy.stats.pearsonr(x=dist_0_1, y=post_0_1)[0], scipy.stats.pearsonr(x=dist_0_2, y=post_0_2)[0], scipy.stats.pearsonr(x=dist_1_2, y=post_1_2)[0]]
+    EMD = [wasserstein_distance(dist_norm_0_1, post_norm_0_1), wasserstein_distance(dist_norm_0_2, post_norm_0_2), wasserstein_distance(dist_norm_1_2, post_norm_1_2)]
+    corr_stats = [pearsonr(x=dist_0_1, y=post_0_1)[0], pearsonr(x=dist_0_2, y=post_0_2)[0], pearsonr(x=dist_1_2, y=post_1_2)[0]]
 
     # generate jointplot
     g = sns.JointGrid(x=dist_norm, y=post_norm, space=0, height=figsize[0])
     g.plot_joint(plt.hist2d, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
-    sns.kdeplot(dist_norm_0_1, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkorange', label=cluster_names[0]+' - '+cluster_names[1], legend=legend)
-    sns.kdeplot(dist_norm_0_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkgreen', label=cluster_names[0]+' - '+cluster_names[2], legend=legend)
-    sns.kdeplot(dist_norm_1_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkred', label=cluster_names[1]+' - '+cluster_names[2], legend=legend)
-    if legend:
-        g.ax_marg_x.legend(loc=(1.01,0.1))
-    sns.kdeplot(post_norm_0_1, shade=False, bw=0.01, vertical=True,  color='darkorange', ax=g.ax_marg_y)
-    sns.kdeplot(post_norm_0_2, shade=False, bw=0.01, vertical=True,  color='darkgreen', ax=g.ax_marg_y)
-    sns.kdeplot(post_norm_1_2, shade=False, bw=0.01, vertical=True,  color='darkred', ax=g.ax_marg_y)
-    g.ax_joint.plot(np.linspace(max(min(dist_norm),min(post_norm)),1,100), np.linspace(max(min(dist_norm),min(post_norm)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
-    plt.xlabel('Pre-Transformation', fontsize=14)
-    plt.ylabel('Post-Transformation', fontsize=14)
-    plt.tick_params(labelleft=False, labelbottom=False)
-
-    return EMD, corr_stats
-
-
-def cluster_arrangement_general(pre, post, cluster_names, figsize=(6,6), legend=True):
-    '''
-    pre = list of three (3) matrices
-    post = list of three (3) matrices
-    cluster_names = list of cluster names for labeling i.e. ['Bipolar Cells','Rods','Amacrine Cells'] for clusters 0, 1 and 2, respectively
-    figsize = size of output figure to plot
-    pre_transform = apply transformation to pre_obj counts? (None, 'arcsinh', or 'log2')
-    legend = show legend on plot
-    '''
-    # distance calculations for pre_obj
-    dist_0_1 = scipy.spatial.distance_matrix(pre[0], pre[1]).flatten()
-    dist_0_2 = scipy.spatial.distance_matrix(pre[0], pre[2]).flatten()
-    dist_1_2 = scipy.spatial.distance_matrix(pre[1], pre[2]).flatten()
-    dist = np.append(np.append(dist_0_1,dist_0_2), dist_1_2)
-    dist_norm = (dist-dist.min())/(dist.max()-dist.min())
-    dist_norm_0_1 = dist_norm[:dist_0_1.shape[0]]
-    dist_norm_0_2 = dist_norm[dist_0_1.shape[0]:dist_0_1.shape[0]+dist_0_2.shape[0]]
-    dist_norm_1_2 = dist_norm[dist_0_1.shape[0]+dist_0_2.shape[0]:]
-
-    # distance calculations for post_obj
-    post_0_1 = scipy.spatial.distance_matrix(pre[0], pre[1]).flatten()
-    post_0_2 = scipy.spatial.distance_matrix(pre[0], pre[2]).flatten()
-    post_1_2 = scipy.spatial.distance_matrix(pre[1], pre[2]).flatten()
-    post = np.append(np.append(post_0_1,post_0_2), post_1_2)
-    post_norm = (post-post.min())/(post.max()-post.min())
-    post_norm_0_1 = post_norm[:post_0_1.shape[0]]
-    post_norm_0_2 = post_norm[post_0_1.shape[0]:post_0_1.shape[0]+post_0_2.shape[0]]
-    post_norm_1_2 = post_norm[post_0_1.shape[0]+post_0_2.shape[0]:]
-
-    # calculate EMD and Pearson correlation stats
-    EMD = [scipy.stats.wasserstein_distance(dist_norm_0_1, post_norm_0_1), scipy.stats.wasserstein_distance(dist_norm_0_2, post_norm_0_2), scipy.stats.wasserstein_distance(dist_norm_1_2, post_norm_1_2)]
-    corr_stats = [scipy.stats.pearsonr(x=dist_0_1, y=post_0_1)[0], scipy.stats.pearsonr(x=dist_0_2, y=post_0_2)[0], scipy.stats.pearsonr(x=dist_1_2, y=post_1_2)[0]]
-
-    # generate jointplot
-    g = sns.JointGrid(x=dist_norm, y=post_norm, space=0, height=figsize[0])
-    g.plot_joint(plt.hist2d, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
-    sns.kdeplot(dist_norm_0_1, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkorange', label=cluster_names[0]+' - '+cluster_names[1], legend=legend)
-    sns.kdeplot(dist_norm_0_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkgreen', label=cluster_names[0]+' - '+cluster_names[2], legend=legend)
-    sns.kdeplot(dist_norm_1_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkred', label=cluster_names[1]+' - '+cluster_names[2], legend=legend)
+    sns.kdeplot(dist_norm_0_1, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkorange', label=ID_names[0]+' - '+ID_names[1], legend=legend)
+    sns.kdeplot(dist_norm_0_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkgreen', label=ID_names[0]+' - '+ID_names[2], legend=legend)
+    sns.kdeplot(dist_norm_1_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkred', label=ID_names[1]+' - '+ID_names[2], legend=legend)
     if legend:
         g.ax_marg_x.legend(loc=(1.01,0.1))
     sns.kdeplot(post_norm_0_1, shade=False, bw=0.01, vertical=True,  color='darkorange', ax=g.ax_marg_y)

@@ -1,25 +1,37 @@
 # scRNA-seq analysis and slide-seq fusion objects
 
 # @author: C Heiser
-# September 2019
+# October 2019
 
-# basic utilities and plotting
-from fcc_utils import *
+# basics
+import numpy as np
+import pandas as pd
+import scanpy as sc
+# scipy functions
+from scipy.stats import pearsonr, wasserstein_distance
+from scipy.spatial import distance_matrix, cKDTree
+from scipy.interpolate import interpnd, griddata
+# scikit packages
+from sklearn.neighbors import kneighbors_graph          # simple K-nearest neighbors graph
+# plotting packages
+import matplotlib.pyplot as plt
+import seaborn as sns; sns.set(style = 'white')
+# utility functions
+from fcc_utils import plot_DR, bin_threshold
 # packages for reading in data files
 import os
 # scikit packages
-from sklearn.preprocessing import normalize     # matrix normalization
-from sklearn.decomposition import PCA           # PCA
-from sklearn.manifold import TSNE               # t-SNE
-from sklearn.neighbors import kneighbors_graph  # K-nearest neighbors graph
-from sklearn.metrics import silhouette_score    # silhouette score
+from sklearn.preprocessing import normalize             # matrix normalization
+from sklearn.decomposition import PCA                   # PCA
+from sklearn.manifold import TSNE                       # t-SNE
+from sklearn.neighbors import kneighbors_graph          # K-nearest neighbors graph
+from sklearn.metrics import silhouette_score            # silhouette score
 # density peak clustering
-from pydpc import Cluster                       # density-peak clustering
+from pydpc import Cluster                               # density-peak clustering
 # NVR feature selection
-#import nvr
+import nvr
 # other DR methods
 from umap import UMAP                           # UMAP
-
 
 
 class couscous():
@@ -163,7 +175,7 @@ class couscous():
         return out[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed counts array
 
 
-    def distance_matrix(self, data_type='counts', transform=None, ranks='all', **kwargs):
+    def dist_matrix(self, data_type='counts', transform=None, ranks='all', **kwargs):
         '''
         calculate Euclidean distances between cells in matrix of shape (n_cells, n_cells)
             data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to calculate distances in
@@ -187,7 +199,7 @@ class couscous():
 
         # then subset data by rank-ordered barcode appearance
         if ranks=='all':
-            return scipy.spatial.distance_matrix(transformed, transformed)
+            return distance_matrix(transformed, transformed)
 
         elif not isinstance(ranks, (list,)): # make sure input is list-formatted
             ranks = [ranks]
@@ -197,10 +209,10 @@ class couscous():
         IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
         ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
         ranks_counts = transformed[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed data
-        return scipy.spatial.distance_matrix(ranks_counts, ranks_counts)
+        return distance_matrix(ranks_counts, ranks_counts)
 
 
-    def barcode_distance_matrix(self, ranks, data_type='counts', transform=None, **kwargs):
+    def barcode_dist_matrix(self, ranks, data_type='counts', transform=None, **kwargs):
         '''
         calculate Euclidean distances between cells in two barcode groups within a dataset
             ranks = which TWO barcodes to calculate distances between. List of ranks of most abundant barcodes (integers, i.e. [1,2] for top 2 barcodes),
@@ -226,7 +238,7 @@ class couscous():
 
         ranks_0 = transformed[np.array(self.barcodes.isin(list(ranks[0])))] # subset transformed counts array to first barcode ID
         ranks_1 = transformed[np.array(self.barcodes.isin(list(ranks[1])))] # subset transformed counts array to second barcode ID
-        return scipy.spatial.distance_matrix(ranks_0, ranks_1)
+        return distance_matrix(ranks_0, ranks_1)
 
 
     def knn_graph(self, k, data_type='counts', **kwargs):
@@ -234,9 +246,9 @@ class couscous():
         calculate k nearest neighbors for each cell in distance matrix of shape (n_cells, n_cells)
             k = number of nearest neighbors to determine
             data_type = one of ['counts', 'PCA', 't-SNE', 'UMAP'] describing space to calculate distances in
-            **kwargs = keyword arguments to pass to distance_matrix() function
+            **kwargs = keyword arguments to pass to dist_matrix() function
         '''
-        return kneighbors_graph(self.distance_matrix(data_type=data_type, **kwargs), k, mode='connectivity', include_self=False).toarray()
+        return kneighbors_graph(self.dist_matrix(data_type=data_type, **kwargs), k, mode='connectivity', include_self=False).toarray()
 
 
     def barcode_counts(self, IDs='all'):
@@ -770,15 +782,15 @@ class pita(couscous):
         self.grid_x, self.grid_y = np.mgrid[xmin:xmax, ymin:ymax]
 
         # map beads to pixel grid
-        self.pixel_map = scipy.interpolate.griddata(self.data['slide-seq'].values, self.data['slide-seq'].index, (self.grid_x, self.grid_y), method='nearest')
+        self.pixel_map = griddata(self.data['slide-seq'].values, self.data['slide-seq'].index, (self.grid_x, self.grid_y), method='nearest')
 
 
     def trim_pixels(self, threshold=100):
         '''
         trim_pixels
         '''
-        tree = scipy.spatial.cKDTree(self.data['slide-seq'].values)
-        xi = scipy.interpolate.interpnd._ndim_coords_from_arrays((self.grid_x, self.grid_y), ndim=self.data['slide-seq'].shape[1])
+        tree = cKDTree(self.data['slide-seq'].values)
+        xi = interpnd._ndim_coords_from_arrays((self.grid_x, self.grid_y), ndim=self.data['slide-seq'].shape[1])
         dists, _ = tree.query(xi)
 
         self.show_pita(assembled=dists, figsize=(4,4))
@@ -902,3 +914,60 @@ class pita(couscous):
             barcodes = None
 
         return cls(data=data, bead_locs=beads, data_type=data_type, labels=labels, cells_axis=cells_axis, barcodes=barcodes)
+
+
+
+# furry-couscous manuscript function
+def cluster_arrangement(pre_obj, post_obj, pre_type, post_type, clusters, cluster_names, figsize=(6,6), pre_transform='arcsinh', legend=True):
+    '''
+    pre_obj = RNA_counts object
+    post_obj = DR object
+    pre_type =
+    post_type =
+    clusters = list of barcode IDs i.e. ['0','1','2'] to calculate pairwise distances between clusters 0, 1 and 2
+    cluster_names = list of cluster names for labeling i.e. ['Bipolar Cells','Rods','Amacrine Cells'] for clusters 0, 1 and 2, respectively
+    figsize = size of output figure to plot
+    pre_transform = apply transformation to pre_obj counts? (None, 'arcsinh', or 'log2')
+    legend = show legend on plot
+    '''
+    # distance calculations for pre_obj
+    dist_0_1 = pre_obj.barcode_distance_matrix(data_type=pre_type, ranks=[clusters[0],clusters[1]], transform=pre_transform).flatten()
+    dist_0_2 = pre_obj.barcode_distance_matrix(data_type=pre_type, ranks=[clusters[0],clusters[2]], transform=pre_transform).flatten()
+    dist_1_2 = pre_obj.barcode_distance_matrix(data_type=pre_type, ranks=[clusters[1],clusters[2]], transform=pre_transform).flatten()
+    dist = np.append(np.append(dist_0_1,dist_0_2), dist_1_2)
+    dist_norm = (dist-dist.min())/(dist.max()-dist.min())
+    dist_norm_0_1 = dist_norm[:dist_0_1.shape[0]]
+    dist_norm_0_2 = dist_norm[dist_0_1.shape[0]:dist_0_1.shape[0]+dist_0_2.shape[0]]
+    dist_norm_1_2 = dist_norm[dist_0_1.shape[0]+dist_0_2.shape[0]:]
+
+    # distance calculations for post_obj
+    post_0_1 = post_obj.barcode_distance_matrix(data_type=post_type, ranks=[clusters[0],clusters[1]]).flatten()
+    post_0_2 = post_obj.barcode_distance_matrix(data_type=post_type, ranks=[clusters[0],clusters[2]]).flatten()
+    post_1_2 = post_obj.barcode_distance_matrix(data_type=post_type, ranks=[clusters[1],clusters[2]]).flatten()
+    post = np.append(np.append(post_0_1,post_0_2), post_1_2)
+    post_norm = (post-post.min())/(post.max()-post.min())
+    post_norm_0_1 = post_norm[:post_0_1.shape[0]]
+    post_norm_0_2 = post_norm[post_0_1.shape[0]:post_0_1.shape[0]+post_0_2.shape[0]]
+    post_norm_1_2 = post_norm[post_0_1.shape[0]+post_0_2.shape[0]:]
+
+    # calculate EMD and Pearson correlation stats
+    EMD = [wasserstein_distance(dist_norm_0_1, post_norm_0_1), wasserstein_distance(dist_norm_0_2, post_norm_0_2), wasserstein_distance(dist_norm_1_2, post_norm_1_2)]
+    corr_stats = [pearsonr(x=dist_0_1, y=post_0_1)[0], pearsonr(x=dist_0_2, y=post_0_2)[0], pearsonr(x=dist_1_2, y=post_1_2)[0]]
+
+    # generate jointplot
+    g = sns.JointGrid(x=dist_norm, y=post_norm, space=0, height=figsize[0])
+    g.plot_joint(plt.hist2d, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
+    sns.kdeplot(dist_norm_0_1, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkorange', label=cluster_names[0]+' - '+cluster_names[1], legend=legend)
+    sns.kdeplot(dist_norm_0_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkgreen', label=cluster_names[0]+' - '+cluster_names[2], legend=legend)
+    sns.kdeplot(dist_norm_1_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkred', label=cluster_names[1]+' - '+cluster_names[2], legend=legend)
+    if legend:
+        g.ax_marg_x.legend(loc=(1.01,0.1))
+    sns.kdeplot(post_norm_0_1, shade=False, bw=0.01, vertical=True,  color='darkorange', ax=g.ax_marg_y)
+    sns.kdeplot(post_norm_0_2, shade=False, bw=0.01, vertical=True,  color='darkgreen', ax=g.ax_marg_y)
+    sns.kdeplot(post_norm_1_2, shade=False, bw=0.01, vertical=True,  color='darkred', ax=g.ax_marg_y)
+    g.ax_joint.plot(np.linspace(max(min(dist_norm),min(post_norm)),1,100), np.linspace(max(min(dist_norm),min(post_norm)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
+    plt.xlabel('Pre-Transformation', fontsize=14)
+    plt.ylabel('Post-Transformation', fontsize=14)
+    plt.tick_params(labelleft=False, labelbottom=False)
+
+    return EMD, corr_stats
