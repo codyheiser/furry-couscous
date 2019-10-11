@@ -9,7 +9,7 @@ import pandas as pd
 import scanpy as sc
 # scipy functions
 from scipy.stats import pearsonr, wasserstein_distance
-from scipy.spatial import distance_matrix
+from scipy.spatial.distance import pdist, cdist
 # scikit packages
 from sklearn.neighbors import kneighbors_graph          # simple K-nearest neighbors graph
 from skbio.stats.distance import mantel					# Mantel test for correlation of symmetric distance matrices
@@ -71,7 +71,7 @@ def gf_icf(adata, layer=None):
 def knn_graph(dist_matrix, k, adata, save_rep='knn'):
     '''
     build simple binary k-nearest neighbor graph and add to anndata object
-        dist_matrix = distance matrix to calculate knn graph for (i.e. distance_matrix(adata.obsm['X_pca'], adata.obsm['X_pca']))
+        dist_matrix = distance matrix to calculate knn graph for (i.e. pdist(adata.obsm['X_pca']))
         k = number of nearest neighbors to determine
         adata = AnnData object to add resulting graph to (in .uns slot)
         save_rep = name of .uns key to save knn graph to within adata (default adata.uns['knn'])
@@ -268,44 +268,38 @@ def bin_threshold(mat, threshmin=None, threshmax=0.5):
 # furry-couscous manuscript functions
 def distance_stats(pre, post):
     '''
-    Test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
-    1) performs Mantel (for symmetrical matrices) or Pearson test for correlation of distance matrices
-    2) normalizes unique distances (upper triangle of distance matrix) using z-score for each dataset
-    3) calculates Wasserstein or Earth-Mover's Distance for normalized euclidean distance distributions between datasets
-        pre = distance matrix of shape (n_cells, n_cells) before transformation/projection
-        post = distance matrix of shape (n_cells, n_cells) after transformation/projection
+    test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
+    1) performs Pearson correlation of distance distributions
+    2) normalizes unique distances using z-score for each dataset
+    3) calculates Wasserstein or Earth-Mover's Distance for normalized distance distributions between datasets
+        pre = vector of unique distances (pdist()) or distance matrix of shape (n_cells, m_cells) (cdist()) before transformation/projection
+        post = vector of unique distances (pdist()) distance matrix of shape (n_cells, m_cells) (cdist()) after transformation/projection
     '''
     # make sure the number of cells in each matrix is the same
     assert pre.shape == post.shape , 'Matrices contain different number of distances.\n{} in "pre"\n{} in "post"\n'.format(pre.shape[0], post.shape[0])
 
-    if pre.shape[0]==pre.shape[1] and np.allclose(pre,pre.T): # test for matrix symmetry
-        # calculate correlation coefficient and p-value for distance matrices using Mantel test
-        corr_stats = mantel(x=pre, y=post)
+    # if distance matrix (mA x mB, result of cdist), flatten to unique cell-cell distances
+    if pre.ndim==2:
+        pre = pre.flatten()
+        post = post.flatten()
 
-        # for each matrix, take the upper triangle (it's symmetrical) for calculating EMD and plotting distance differences
-        pre_flat = pre[np.triu_indices(pre.shape[1],1)]
-        post_flat = post[np.triu_indices(post.shape[1],1)]
-
-    else:
-        pre_flat = pre.flatten()
-        post_flat = post.flatten()
-
-        # calculate correlation coefficient using Pearson correlation
-        corr_stats = pearsonr(x=pre_flat, y=post_flat)
+    # calculate correlation coefficient using Pearson correlation
+    corr_stats = pearsonr(x=pre, y=post)
 
     # normalize flattened distances by z-score within each set for fair comparison of probability distributions
-    pre_flat_norm = (pre_flat-pre_flat.min())/(pre_flat.max()-pre_flat.min())
-    post_flat_norm = (post_flat-post_flat.min())/(post_flat.max()-post_flat.min())
+    pre_norm = (pre-pre.min())/(pre.max()-pre.min())
+    post_norm = (post-post.min())/(post.max()-post.min())
 
     # calculate EMD for the distance matrices
-    EMD = wasserstein_distance(pre_flat_norm, post_flat_norm)
+    EMD = wasserstein_distance(pre_norm, post_norm)
 
-    return pre_flat_norm, post_flat_norm, corr_stats, EMD
+    return pre_norm, post_norm, corr_stats, EMD
 
 
 def plot_cell_distances(pre_norm, post_norm, save_to=None):
     '''
-    plot all unique cell-cell distances before and after some transformation. Executes matplotlib.pyplot.plot(), does not initialize figure.
+    plot all unique cell-cell distances before and after some transformation. 
+    Executes matplotlib.pyplot.plot(), does not initialize figure.
         pre_norm = flattened vector of normalized, unique cell-cell distances "pre-transformation".
             Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
         post_norm = flattened vector of normalized, unique cell-cell distances "post-transformation".
@@ -320,7 +314,8 @@ def plot_cell_distances(pre_norm, post_norm, save_to=None):
 
 def plot_distributions(pre_norm, post_norm):
     '''
-    plot probability distributions for all unique cell-cell distances before and after some transformation. Executes matplotlib.pyplot.plot(), does not initialize figure.
+    plot probability distributions for all unique cell-cell distances before and after some transformation. 
+    Executes matplotlib.pyplot.plot(), does not initialize figure.
         pre_norm = flattened vector of normalized, unique cell-cell distances "pre-transformation".
             Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
         post_norm = flattened vector of normalized, unique cell-cell distances "post-transformation".
@@ -335,7 +330,8 @@ def plot_distributions(pre_norm, post_norm):
 
 def plot_cumulative_distributions(pre_norm, post_norm):
     '''
-    plot cumulative probability distributions for all unique cell-cell distances before and after some transformation. Executes matplotlib.pyplot.plot(), does not initialize figure.
+    plot cumulative probability distributions for all unique cell-cell distances before and after some transformation. 
+    Executes matplotlib.pyplot.plot(), does not initialize figure.
         pre_norm = flattened vector of normalized, unique cell-cell distances "pre-transformation".
             Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
         post_norm = flattened vector of normalized, unique cell-cell distances "post-transformation".
@@ -355,7 +351,8 @@ def plot_cumulative_distributions(pre_norm, post_norm):
 
 def plot_distance_correlation(pre_norm, post_norm):
     '''
-    plot correlation of all unique cell-cell distances before and after some transformation. Executes matplotlib.pyplot.plot(), does not initialize figure.
+    plot correlation of all unique cell-cell distances before and after some transformation. 
+    Executes matplotlib.pyplot.plot(), does not initialize figure.
         pre_norm: flattened vector of normalized, unique cell-cell distances "pre-transformation".
             Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
         post_norm: flattened vector of normalized, unique cell-cell distances "post-transformation".
@@ -425,7 +422,7 @@ def compare_euclid(pre, post, plot_out=True):
 
 def knn_preservation(pre, post):
     '''
-    Test for K-nearest neighbor preservation (%) before and after transformation by a function or DR algorithm.
+    test for k-nearest neighbor preservation (%) before and after transformation by a function or DR algorithm.
         pre = Knn graph of shape (n_cells, n_cells) before transformation/projection
         post = Knn graph of shape (n_cells, n_cells) after transformation/projection
     '''
@@ -447,9 +444,9 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,
         save_to = path to .png file to save output, or None
     '''
     # distance calculations for pre_obj
-    dist_0_1 = distance_matrix(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[1]]).flatten()
-    dist_0_2 = distance_matrix(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[2]]).flatten()
-    dist_1_2 = distance_matrix(pre[adata.obs[obs_col]==IDs[1]], pre[adata.obs[obs_col]==IDs[2]]).flatten()
+    dist_0_1 = cdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[1]]).flatten()
+    dist_0_2 = cdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[2]]).flatten()
+    dist_1_2 = cdist(pre[adata.obs[obs_col]==IDs[1]], pre[adata.obs[obs_col]==IDs[2]]).flatten()
     dist = np.append(np.append(dist_0_1,dist_0_2), dist_1_2)
     dist_norm = (dist-dist.min())/(dist.max()-dist.min())
     dist_norm_0_1 = dist_norm[:dist_0_1.shape[0]]
@@ -457,9 +454,9 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,
     dist_norm_1_2 = dist_norm[dist_0_1.shape[0]+dist_0_2.shape[0]:]
 
     # distance calculations for post_obj
-    post_0_1 = distance_matrix(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[1]]).flatten()
-    post_0_2 = distance_matrix(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[2]]).flatten()
-    post_1_2 = distance_matrix(post[adata.obs[obs_col]==IDs[1]], post[adata.obs[obs_col]==IDs[2]]).flatten()
+    post_0_1 = cdist(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[1]]).flatten()
+    post_0_2 = cdist(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[2]]).flatten()
+    post_1_2 = cdist(post[adata.obs[obs_col]==IDs[1]], post[adata.obs[obs_col]==IDs[2]]).flatten()
     post = np.append(np.append(post_0_1,post_0_2), post_1_2)
     post_norm = (post-post.min())/(post.max()-post.min())
     post_norm_0_1 = post_norm[:post_0_1.shape[0]]
