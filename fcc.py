@@ -31,7 +31,7 @@ from pydpc import Cluster                               # density-peak clusterin
 # NVR feature selection
 import nvr
 # other DR methods
-from umap import UMAP                           # UMAP
+from umap import UMAP                                   # UMAP
 
 
 class couscous():
