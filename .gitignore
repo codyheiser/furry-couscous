@@ -7,3 +7,4 @@ result.dat
 .nb.html
 *.pyc
 .vscode/
+.envrc
