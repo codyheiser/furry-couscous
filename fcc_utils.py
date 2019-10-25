@@ -1,8 +1,10 @@
-# utility functions
+# -*- coding: utf-8 -*-
+'''
+utility functions
 
-# @author: C Heiser
-# October 2019
-
+@author: C Heiser
+October 2019
+'''
 # basics
 import numpy as np
 import pandas as pd
