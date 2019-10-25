@@ -9,6 +9,7 @@ import pandas as pd
 import scanpy as sc
 # scipy functions
 from scipy.stats import pearsonr, wasserstein_distance
+from scipy.spatial import distance_matrix
 from scipy.spatial.distance import pdist, cdist
 # scikit packages
 from sklearn.neighbors import kneighbors_graph          # simple K-nearest neighbors graph
@@ -146,86 +147,125 @@ def gf_icf_markers(adata, n_genes=5, group_by='louvain'):
     return markers
 
 
-def plot_DR(data, color, pt_size=75, dim_name='dim', figsize=(5,5), legend=None, save_to=None):
+def find_centroids(adata, use_rep, obs_col='louvain'):
     '''
-    general plotting function for dimensionality reduction outputs with cute arrows and labels
-        data = np.array containing variables in columns and observations in rows
-        color = list of length nrow(data) to determine how points should be colored
-        pt_size = size of points in plot
+    find cluster centroids
+        adata = AnnData object
+        use_rep = adata.obsm key containing space to calculate centroids in (i.e. 'X_pca')
+        obs_col = adata.obs column name containing cluster IDs
+        save_rep = adata.uns key
+    '''
+    # get unique cluster names
+    names = sorted(adata.obs[obs_col].unique())
+    # calculate centroids
+    adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.obsm[use_rep][adata.obs[obs_col]==clu,:],axis=0) for clu in sorted(adata.obs[obs_col].unique())])
+    # calculate distances between all centroids
+    adata.uns['{}_centroid_distances'.format(use_rep)] = distance_matrix(adata.uns['{}_centroids'.format(use_rep)], adata.uns['{}_centroids'.format(use_rep)])
+    tmp = np.argsort(adata.uns['{}_centroid_distances'.format(use_rep)][0,])
+    adata.uns['{}_centroid_ranks'.format(use_rep)] = pd.DataFrame({use_rep:tmp.argsort()}, index=names)
+
+
+
+class DR_plot():
+    '''
+    class defining pretty plots of dimension-reduced embeddings such as PCA, t-SNE, and UMAP
+        DR_plot().plot(): utility plotting function that can be passed any numpy array in the `data` parameter
+                 .plot_IDs(): plot one or more cluster IDs on top of an .obsm from an `AnnData` object
+                 .plot_centroids(): plot cluster centroids defined using find_centroids() function on `AnnData` object
+    '''
+    def __init__(self, dim_name='dim', figsize=(5,5)):
+        '''
         dim_name = how to label axes ('dim 1' on x and 'dim 2' on y by default)
         figsize = size of resulting axes
-        legend = None, 'full', or 'brief'
-        save_to = path to .png file to save output, or None
-    '''
-    _, ax = plt.subplots(1, figsize=figsize)
-    sns.scatterplot(data[:,0], data[:,1], s=pt_size, alpha=0.7, hue=color, legend=legend, edgecolor='none')
+        '''
+        self.fig, self.ax = plt.subplots(1, figsize=figsize)
 
-    plt.xlabel('{} 1'.format(dim_name), fontsize=14)
-    ax.xaxis.set_label_coords(0.2, -0.025)
-    plt.ylabel('{} 2'.format(dim_name), fontsize=14)
-    ax.yaxis.set_label_coords(-0.025, 0.2)
+        plt.xlabel('{} 1'.format(dim_name), fontsize=14)
+        self.ax.xaxis.set_label_coords(0.2, -0.025)
+        plt.ylabel('{} 2'.format(dim_name), fontsize=14)
+        self.ax.yaxis.set_label_coords(-0.025, 0.2)
 
-    plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
-    plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+        plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+        plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
 
-    plt.tick_params(labelbottom=False, labelleft=False)
-    sns.despine(left=True, bottom=True)
-    if legend is not None:
-        plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
-    plt.tight_layout()
+        plt.tick_params(labelbottom=False, labelleft=False)
+        sns.despine(left=True, bottom=True)
+        plt.tight_layout()
+    
 
-    if save_to is None:
-        plt.show()
-    else:
-        plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
-        
-    plt.close()
+    def plot(self, data, color, pt_size=75, legend=None, save_to=None):
+        '''
+        general plotting function for dimensionality reduction outputs with cute arrows and labels
+            data = np.array containing variables in columns and observations in rows
+            color = list of length nrow(data) to determine how points should be colored
+            pt_size = size of points in plot
+            legend = None, 'full', or 'brief'
+            save_to = path to .png file to save output, or None
+        '''
+        sns.scatterplot(data[:,0], data[:,1], s=pt_size, alpha=0.7, hue=color, legend=legend, edgecolor='none', ax=self.ax)
 
+        if legend is not None:
+            plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
 
-def plot_IDs(adata, use_rep, obs_col, IDs='all', pt_size=75, dim_name='dim', figsize=(5,5), legend=None, save_to=None):
-    '''
-    general plotting function for dimensionality reduction outputs with cute arrows and labels
-        adata = anndata object to pull dimensionality reduction from
-        use_rep = adata.obsm key to plot from (i.e. 'X_pca')
-        obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
-        IDs = list of IDs to plot, graying out cells not assigned to those IDS (default 'all' IDs)
-        pt_size = size of points in plot
-        dim_name = how to label axes ('dim 1' on x and 'dim 2' on y by default)
-        figsize = size of resulting axes
-        legend = None, 'full', or 'brief'
-        save_to = path to .png file to save output, or None
-    '''
-    plotter = adata.obsm[use_rep]
+        if save_to is None:
+            return
+        else:
+            plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
+    
 
-    _, ax = plt.subplots(1, figsize=figsize)
+    def plot_IDs(self, adata, use_rep, obs_col, IDs='all', pt_size=75, legend=None, save_to=None):
+        '''
+        general plotting function for dimensionality reduction outputs with cute arrows and labels
+            adata = anndata object to pull dimensionality reduction from
+            use_rep = adata.obsm key to plot from (i.e. 'X_pca')
+            obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
+            IDs = list of IDs to plot, graying out cells not assigned to those IDS (default 'all' IDs)
+            pt_size = size of points in plot
+            legend = None, 'full', or 'brief'
+            save_to = path to .png file to save output, or None
+        '''
+        plotter = adata.obsm[use_rep]
 
-    if IDs == 'all':
-        sns.scatterplot(plotter[:,0], plotter[:,1], s=pt_size, alpha=0.7, hue=adata.obs[obs_col], legend=legend, edgecolor='none', palette='plasma')
+        if IDs == 'all':
+            sns.scatterplot(plotter[:,0], plotter[:,1], ax=self.ax, s=pt_size, alpha=0.7, hue=adata.obs[obs_col], legend=legend, edgecolor='none', palette='plasma')
 
-    else:
-        sns.scatterplot(plotter[-adata.obs[obs_col].isin(IDs), 0], plotter[-adata.obs[obs_col].isin(IDs), 1], s=pt_size, alpha=0.1, color='gray', legend=False, edgecolor='none')
-        sns.scatterplot(plotter[adata.obs[obs_col].isin(IDs), 0], plotter[adata.obs[obs_col].isin(IDs), 1], s=pt_size, alpha=0.7, hue=adata.obs.loc[adata.obs[obs_col].isin(IDs), obs_col], legend=legend, edgecolor='none', palette='plasma')
+        else:
+            sns.scatterplot(plotter[-adata.obs[obs_col].isin(IDs), 0], plotter[-adata.obs[obs_col].isin(IDs), 1], ax=self.ax, s=pt_size, alpha=0.1, color='gray', legend=False, edgecolor='none')
+            sns.scatterplot(plotter[adata.obs[obs_col].isin(IDs), 0], plotter[adata.obs[obs_col].isin(IDs), 1], ax=self.ax, s=pt_size, alpha=0.7, hue=adata.obs.loc[adata.obs[obs_col].isin(IDs), obs_col], legend=legend, edgecolor='none', palette='plasma')
 
-    plt.xlabel('{} 1'.format(dim_name), fontsize=14)
-    ax.xaxis.set_label_coords(0.2, -0.025)
-    plt.ylabel('{} 2'.format(dim_name), fontsize=14)
-    ax.yaxis.set_label_coords(-0.025, 0.2)
+        if legend is not None:
+            plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
 
-    plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
-    plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+        if save_to is None:
+            return
+        else:
+            plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
+    
 
-    plt.tick_params(labelbottom=False, labelleft=False)
-    sns.despine(left=True, bottom=True)
-    if legend is not None:
-        plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
-    plt.tight_layout()
+    def plot_centroids(self, adata, use_rep, obs_col, ctr_size=300, pt_size=75, legend=None, save_to=None):
+        '''
+        general plotting function for dimensionality reduction outputs with cute arrows and labels
+            adata = anndata object to pull dimensionality reduction from
+            use_rep = adata.obsm key to plot from (i.e. 'X_pca')
+            obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
+            pt_size = size of points in plot
+            legend = None, 'full', or 'brief'
+            save_to = path to .png file to save output, or None
+        '''
+        points = adata.obsm[use_rep]
+        centroids = adata.uns['{}_centroids'.format(use_rep)]
 
-    if save_to is None:
-        plt.show()
-    else:
-        plt.savefig(fname=save_to, transparent=True, bbox_inches='tight')
+        sns.scatterplot(points[:,0], points[:,1], ax=self.ax, s=pt_size, alpha=0.1, color='gray', legend=False, edgecolor='none')
+        sns.scatterplot(centroids[:,0], centroids[:,1], ax=self.ax, s=ctr_size, alpha=0.7, hue=sorted(adata.obs[obs_col].unique()), legend=legend, edgecolor='none', palette='plasma')
 
-    plt.close()
+        if legend is not None:
+            plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
+
+        if save_to is None:
+            return
+        else:
+            plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
+
 
 
 # fuzzy-lasagna functions
