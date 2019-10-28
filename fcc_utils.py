@@ -9,13 +9,12 @@ October 2019
 import numpy as np
 import pandas as pd
 import scanpy as sc
-# scipy functions
-from scipy.stats import pearsonr, wasserstein_distance
-from scipy.spatial import distance_matrix
-from scipy.spatial.distance import pdist, cdist
-# scikit packages
-from sklearn.neighbors import kneighbors_graph          # simple K-nearest neighbors graph
-from skbio.stats.distance import mantel					# Mantel test for correlation of symmetric distance matrices
+# distance metric functions
+from scipy.stats import pearsonr                    # correlation coefficient
+from scipy.spatial import distance_matrix           # matrix of pairwise distances between two arrays
+from scipy.spatial.distance import pdist, cdist     # unique pairwise and crosswise distances
+from sklearn.neighbors import kneighbors_graph      # simple K-nearest neighbors graph
+from ot import wasserstein_1d                       # POT implementation of Wasserstein distance between 1D arrays
 # plotting packages
 import matplotlib.pyplot as plt
 import seaborn as sns; sns.set(style = 'white')
@@ -328,14 +327,17 @@ def distance_stats(pre, post):
     # calculate correlation coefficient using Pearson correlation
     corr_stats = pearsonr(x=pre, y=post)
 
-    # normalize flattened distances by z-score within each set for fair comparison of probability distributions
-    pre_norm = (pre-pre.min())/(pre.max()-pre.min())
-    post_norm = (post-post.min())/(post.max()-post.min())
+    # min-max normalization for fair comparison of probability distributions
+    pre -= pre.min()
+    pre /= pre.ptp()
+
+    post -= post.min()
+    post /= post.ptp()
 
     # calculate EMD for the distance matrices
-    EMD = wasserstein_distance(pre_norm, post_norm)
+    EMD = wasserstein_1d(pre, post)
 
-    return pre_norm, post_norm, corr_stats, EMD
+    return pre, post, corr_stats, EMD
 
 
 def plot_cell_distances(pre_norm, post_norm, save_to=None):
@@ -486,31 +488,37 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,
         save_to = path to .png file to save output, or None
     '''
     # distance calculations for pre_obj
-    dist_0_1 = cdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[1]]).flatten()
-    dist_0_2 = cdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[2]]).flatten()
-    dist_1_2 = cdist(pre[adata.obs[obs_col]==IDs[1]], pre[adata.obs[obs_col]==IDs[2]]).flatten()
+    dist_0_1 = pdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[1]])
+    dist_0_2 = pdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[2]])
+    dist_1_2 = pdist(pre[adata.obs[obs_col]==IDs[1]], pre[adata.obs[obs_col]==IDs[2]])
+    # combine and min-max normalize
     dist = np.append(np.append(dist_0_1,dist_0_2), dist_1_2)
-    dist_norm = (dist-dist.min())/(dist.max()-dist.min())
-    dist_norm_0_1 = dist_norm[:dist_0_1.shape[0]]
-    dist_norm_0_2 = dist_norm[dist_0_1.shape[0]:dist_0_1.shape[0]+dist_0_2.shape[0]]
-    dist_norm_1_2 = dist_norm[dist_0_1.shape[0]+dist_0_2.shape[0]:]
+    dist -= dist.min()
+    dist /= dist.ptp()
+    # split normalized distances by cluster pair
+    dist_norm_0_1 = dist[:dist_0_1.shape[0]]
+    dist_norm_0_2 = dist[dist_0_1.shape[0]:dist_0_1.shape[0]+dist_0_2.shape[0]]
+    dist_norm_1_2 = dist[dist_0_1.shape[0]+dist_0_2.shape[0]:]
 
     # distance calculations for post_obj
-    post_0_1 = cdist(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[1]]).flatten()
-    post_0_2 = cdist(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[2]]).flatten()
-    post_1_2 = cdist(post[adata.obs[obs_col]==IDs[1]], post[adata.obs[obs_col]==IDs[2]]).flatten()
+    post_0_1 = pdist(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[1]])
+    post_0_2 = pdist(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[2]])
+    post_1_2 = pdist(post[adata.obs[obs_col]==IDs[1]], post[adata.obs[obs_col]==IDs[2]])
+    # combine and min-max normalize
     post = np.append(np.append(post_0_1,post_0_2), post_1_2)
-    post_norm = (post-post.min())/(post.max()-post.min())
-    post_norm_0_1 = post_norm[:post_0_1.shape[0]]
-    post_norm_0_2 = post_norm[post_0_1.shape[0]:post_0_1.shape[0]+post_0_2.shape[0]]
-    post_norm_1_2 = post_norm[post_0_1.shape[0]+post_0_2.shape[0]:]
+    post -= post.min()
+    post /= post.ptp()
+    # split normalized distances by cluster pair
+    post_norm_0_1 = post[:post_0_1.shape[0]]
+    post_norm_0_2 = post[post_0_1.shape[0]:post_0_1.shape[0]+post_0_2.shape[0]]
+    post_norm_1_2 = post[post_0_1.shape[0]+post_0_2.shape[0]:]
 
     # calculate EMD and Pearson correlation stats
-    EMD = [wasserstein_distance(dist_norm_0_1, post_norm_0_1), wasserstein_distance(dist_norm_0_2, post_norm_0_2), wasserstein_distance(dist_norm_1_2, post_norm_1_2)]
+    EMD = [wasserstein_1d(dist_norm_0_1, post_norm_0_1), wasserstein_1d(dist_norm_0_2, post_norm_0_2), wasserstein_1d(dist_norm_1_2, post_norm_1_2)]
     corr_stats = [pearsonr(x=dist_0_1, y=post_0_1)[0], pearsonr(x=dist_0_2, y=post_0_2)[0], pearsonr(x=dist_1_2, y=post_1_2)[0]]
 
     # generate jointplot
-    g = sns.JointGrid(x=dist_norm, y=post_norm, space=0, height=figsize[0])
+    g = sns.JointGrid(x=dist, y=post, space=0, height=figsize[0])
     g.plot_joint(plt.hist2d, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
     sns.kdeplot(dist_norm_0_1, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkorange', label=ID_names[0]+' - '+ID_names[1], legend=legend)
     sns.kdeplot(dist_norm_0_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkgreen', label=ID_names[0]+' - '+ID_names[2], legend=legend)
@@ -520,7 +528,7 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,
     sns.kdeplot(post_norm_0_1, shade=False, bw=0.01, vertical=True,  color='darkorange', ax=g.ax_marg_y)
     sns.kdeplot(post_norm_0_2, shade=False, bw=0.01, vertical=True,  color='darkgreen', ax=g.ax_marg_y)
     sns.kdeplot(post_norm_1_2, shade=False, bw=0.01, vertical=True,  color='darkred', ax=g.ax_marg_y)
-    g.ax_joint.plot(np.linspace(max(min(dist_norm),min(post_norm)),1,100), np.linspace(max(min(dist_norm),min(post_norm)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
+    g.ax_joint.plot(np.linspace(max(dist.min(),post.min()),1,100), np.linspace(max(dist.min(),post.min()),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
     plt.xlabel('Pre-Transformation', fontsize=14)
     plt.ylabel('Post-Transformation', fontsize=14)
     plt.tick_params(labelleft=False, labelbottom=False)
