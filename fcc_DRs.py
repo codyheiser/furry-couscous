@@ -1,10 +1,10 @@
-# dimensionality reduction objects
+# -*- coding: utf-8 -*-
+'''
+dimensionality reduction objects
 
-# @author: C Heiser
-# June 2019
-
-# utility functions
-from fcc_utils import *
+@author: C Heiser
+October 2019
+'''
 # packages for reading in data files
 import os
 import zipfile
@@ -12,7 +12,6 @@ import gzip
 # basics
 import numpy as np
 import pandas as pd
-import scipy as sc
 # scikit packages
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA			# PCA
@@ -20,9 +19,9 @@ from sklearn.manifold import TSNE				# t-SNE
 from sklearn.model_selection import KFold		# K-fold cross-validation
 from sklearn.neighbors import kneighbors_graph	# K-nearest neighbors graph
 from sklearn.metrics import silhouette_score	# silhouette score
+from scipy.spatial.distance import pdist, cdist # unique pairwise and crosswise distances
 # density peak clustering
 from pydpc import Cluster						# density-peak clustering
-
 # plotting packages
 import matplotlib
 import matplotlib.pyplot as plt
@@ -32,13 +31,13 @@ import seaborn as sns; sns.set(style = 'white')
 
 # UMAP
 try:
-	from umap import UMAP						# UMAP
+	from umap import UMAP
 except ImportError:
 	print('UMAP module not detected. Functionality will be disabled.')
 
 # DCA
 try:
-	import scanpy					# DCA
+	import scanpy
 except ImportError:
 	print('Scanpy module not detected. DCA Functionality will be disabled.')
 
@@ -51,13 +50,13 @@ else:
 
 # ZIFA
 try:
-	from ZIFA import block_ZIFA					# ZIFA
+	from ZIFA import block_ZIFA
 except ImportError:
 	print('ZIFA module not detected. Functionality will be disabled.')
 
 # NVR
 try:
-	import nvr 									# NVR
+	import nvr
 except ImportError:
 	print('NVR module not detected. Functionality will be disabled.')
 
@@ -120,7 +119,7 @@ class RNA_counts():
 
 		# then subset data by rank-ordered barcode appearance
 		if ranks=='all':
-			return sc.spatial.distance_matrix(transformed, transformed)
+			return cdist(transformed, transformed)
 
 		elif not isinstance(ranks, (list,)): # make sure input is list-formatted
 			ranks = [ranks]
@@ -130,7 +129,7 @@ class RNA_counts():
 		IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
 		ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
 		ranks_counts = transformed[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed counts array
-		return sc.spatial.distance_matrix(ranks_counts, ranks_counts)
+		return cdist(ranks_counts, ranks_counts)
 
 
 	def barcode_distance_matrix(self, ranks, transform=None, **kwargs):
@@ -155,7 +154,7 @@ class RNA_counts():
 
 		ranks_0 = transformed[np.array(self.barcodes.isin(list(ranks[0])))] # subset transformed counts array to first barcode ID
 		ranks_1 = transformed[np.array(self.barcodes.isin(list(ranks[1])))] # subset transformed counts array to second barcode ID
-		return sc.spatial.distance_matrix(ranks_0, ranks_1)
+		return cdist(ranks_0, ranks_1)
 
 
 	def knn_graph(self, k, **kwargs):
@@ -283,7 +282,6 @@ class RNA_counts():
 
 		else:
 			barcodes = None
-
 
 		return cls(data, labels=labels, cells_axis=cells_axis, barcodes=barcodes)
 
@@ -516,7 +514,7 @@ class DR():
 
 		# then subset data by rank-ordered barcode appearance
 		if ranks=='all':
-			return sc.spatial.distance_matrix(transformed, transformed)
+			return cdist(transformed, transformed)
 
 		elif not isinstance(ranks, (list,)): # make sure input is list-formatted
 			ranks = [ranks]
@@ -526,7 +524,7 @@ class DR():
 		IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
 		ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
 		ranks_counts = transformed[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed counts array
-		return sc.spatial.distance_matrix(ranks_counts, ranks_counts)
+		return cdist(ranks_counts, ranks_counts)
 
 
 	def barcode_distance_matrix(self, ranks, transform=None, **kwargs):
@@ -551,7 +549,7 @@ class DR():
 
 		ranks_0 = transformed[np.array(self.barcodes.isin(list(ranks[0])))] # subset transformed counts array to first barcode ID
 		ranks_1 = transformed[np.array(self.barcodes.isin(list(ranks[1])))] # subset transformed counts array to second barcode ID
-		return sc.spatial.distance_matrix(ranks_0, ranks_1)
+		return cdist(ranks_0, ranks_1)
 
 	def knn_graph(self, k, **kwargs):
 		'''
@@ -662,7 +660,7 @@ class DR():
 		IDs, counts = np.unique(self.clu.membership, return_counts=True) # get cluster counts and IDs
 		bbox_props = dict(boxstyle="round", fc="w", ec="0.5", alpha=0.9) # set up annotate box
 		# add percentages of each cluster to plot
-		for ID, count, x, y in zip(IDs, counts, self.results[self.clu.clusters, 0], self.results[self.clu.clusters, 1]):
+		for _, count, x, y in zip(IDs, counts, self.results[self.clu.clusters, 0], self.results[self.clu.clusters, 1]):
 			ax[2].annotate('{} %'.format(np.round(count/counts.sum()*100,2)), xy=(x, y), ha="center", va="center", size=12, bbox=bbox_props)
 
 		for _ax in ax:
@@ -682,7 +680,7 @@ class DR():
 		'''
 		if color is None:
 			color = self.clu.density
-		fig, ax = plt.subplots(1, figsize=figsize)
+		_, ax = plt.subplots(1, figsize=figsize)
 		sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=color, legend=None, edgecolor='none')
 
 		plt.xlabel('{} 1'.format(self.name), fontsize=14)
@@ -713,7 +711,7 @@ class DR():
 			figsize = size in inches of output figure
 		'''
 		assert self.barcodes is not None, 'Barcodes not assigned.\n'
-		fig, ax = plt.subplots(1, figsize=figsize)
+		_, ax = plt.subplots(1, figsize=figsize)
 
 		if ranks == 'all':
 			sns.scatterplot(self.results[:,0], self.results[:,1], s=75, alpha=0.7, hue=self.barcodes, legend=None, edgecolor='none', palette='plasma')
@@ -894,7 +892,7 @@ class fcc_DCA(DR):
 		self.DCA_norm = norm # store normalization decision as metadata
 		self.adata = scanpy.AnnData(matrix) # generate AnnData object (https://github.com/theislab/scanpy) for passing to DCA
 		scanpy.pp.filter_genes(self.adata, min_counts=1) # remove features with 0 counts for all cells
-		scanpy.pp.dca(self.adata, mode=mode, threads=n_threads, random_state=seed, hidden_size=hidden_size, normalize_per_cell=False) # perform DCA analysis on AnnData object
+		scanpy.api.pp.dca(self.adata, mode=mode, threads=n_threads, random_state=seed, hidden_size=hidden_size, normalize_per_cell=False) # perform DCA analysis on AnnData object
 
 		if self.DCA_norm:
 			scanpy.pp.normalize_per_cell(self.adata) # normalize features for each cell with scanpy's method
