@@ -182,14 +182,15 @@ class DR_plot():
 
 
 
-def distance_stats(pre, post):
+def distance_stats(pre, post, downsample=False):
     '''
     test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
     1) performs Pearson correlation of distance distributions
-    2) normalizes unique distances using z-score for each dataset
+    2) normalizes unique distances using min-max standardization for each dataset
     3) calculates Wasserstein or Earth-Mover's Distance for normalized distance distributions between datasets
         pre = vector of unique distances (pdist()) or distance matrix of shape (n_cells, m_cells) (cdist()) before transformation/projection
         post = vector of unique distances (pdist()) distance matrix of shape (n_cells, m_cells) (cdist()) after transformation/projection
+        downsample = number of distances to downsample to (maximum of 50M [~10k cells, if symmetrical] is recommended for performance)
     '''
     # make sure the number of cells in each matrix is the same
     assert pre.shape == post.shape , 'Matrices contain different number of distances.\n{} in "pre"\n{} in "post"\n'.format(pre.shape[0], post.shape[0])
@@ -198,6 +199,13 @@ def distance_stats(pre, post):
     if pre.ndim==2:
         pre = pre.flatten()
         post = post.flatten()
+
+    # if dataset is large, randomly downsample to reasonable number of cells for calculation
+    if downsample:
+        assert downsample < len(pre), 'Must provide downsample value smaller than total number of cell-cell distances provided in pre and post'
+        idx = np.random.choice(np.arange(len(pre)), downsample, replace=False)
+        pre = pre[idx]
+        post = post[idx]
 
     # calculate correlation coefficient using Pearson correlation
     corr_stats = pearsonr(x=pre, y=post)

@@ -28,4 +28,4 @@ Contain utility functions for manipulating datasets and comparing feature-reduce
 Defines python classes for manipulation, processing, and visualization of scRNA-seq counts data and dimensionality reduction objects.  
 
 ##### Tutorials:
-Consult `fcc_classes_tutorial.ipynb` and `distance_preservation_tutorial.ipynb` for info on how to create and manipulate _RNA_counts_ and _DR_ objects, and perform global and local structure preservation analysis on low-dimensional embeddings of your own datasets.  
+Consult `DR_classes_tutorial.ipynb` and `distance_preservation_tutorial.ipynb` for info on how to create and manipulate _RNA_counts_ and _DR_ objects, and perform global and local structure preservation analysis on low-dimensional embeddings of your own datasets.  
