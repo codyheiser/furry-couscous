@@ -54,11 +54,6 @@ try:
 except ImportError:
 	print('ZIFA module not detected. Functionality will be disabled.')
 
-# NVR
-try:
-	import nvr
-except ImportError:
-	print('NVR module not detected. Functionality will be disabled.')
 
 
 class RNA_counts():
@@ -418,33 +413,6 @@ class RNA_counts():
 			splits['test'].append(cls(counts_obj.data.iloc[test_i], labels=[counts_obj.cell_labels, counts_obj.gene_labels], barcodes=codes))
 
 		return splits
-
-
-	@classmethod
-	def nvr_select(cls, counts_obj, parse_noise=True, **kwargs):
-		'''
-		use neighborhood variance ratio (NVR) to feature-select RNA_counts object
-		return RNA_counts object with reduced data.
-			counts_obj = RNA_counts object to use as template for new, feature-selected RNA_counts object
-			parse_noise = use pyNVR to get rid of noisy genes first?
-			**kwargs = keyword arguments to pass to arcsinh_norm() function
-		'''
-		if parse_noise:
-			hqGenes = nvr.parseNoise(counts_obj.counts) # identify non-noisy genes
-			selected_genes = nvr.select_genes(counts_obj.arcsinh_norm(**kwargs)[:,hqGenes]) # select features from arsinh-transformed, non-noisy data
-
-		else:
-			selected_genes = nvr.select_genes(counts_obj.arcsinh_norm(**kwargs)) # select features from arsinh-transformed, non-noisy data
-
-		if counts_obj.barcodes is not None:
-			codes = pd.DataFrame(counts_obj.barcodes)
-			codes['Cell Barcode'] = codes.index # make barcodes mergeable when calling cls()
-
-		else:
-			codes=None
-
-		print('\nSelected {} variable genes\n'.format(selected_genes.shape[0]))
-		return cls(counts_obj.data.iloc[:,selected_genes], labels=[counts_obj.cell_labels, counts_obj.gene_labels], barcodes=codes)
 
 
 	@classmethod
