@@ -1,23 +1,27 @@
-# scRNA-seq analysis and slide-seq fusion objects
+# -*- coding: utf-8 -*-
+'''
+scRNA-seq analysis and slide-seq fusion objects
 
-# @author: C Heiser
-# October 2019
-
+@author: C Heiser
+October 2019
+'''
 # basics
 import numpy as np
 import pandas as pd
 import scanpy as sc
 # scipy functions
-from scipy.stats import pearsonr, wasserstein_distance
-from scipy.spatial import distance_matrix, cKDTree
+from scipy.stats import pearsonr
+from scipy.spatial import cKDTree
+from scipy.spatial.distance import pdist, cdist         # unique pairwise and crosswise distances
 from scipy.interpolate import interpnd, griddata
+from ot import wasserstein_1d                           # POT implementation of Wasserstein distance between 1D arrays
 # scikit packages
 from sklearn.neighbors import kneighbors_graph          # simple K-nearest neighbors graph
 # plotting packages
 import matplotlib.pyplot as plt
 import seaborn as sns; sns.set(style = 'white')
 # utility functions
-from fcc_utils import plot_DR, bin_threshold
+from fcc_utils import DR_plot, bin_threshold
 # packages for reading in data files
 import os
 # scikit packages
@@ -29,7 +33,10 @@ from sklearn.metrics import silhouette_score            # silhouette score
 # density peak clustering
 from pydpc import Cluster                               # density-peak clustering
 # NVR feature selection
-import nvr
+try:
+	import nvr
+except ImportError:
+	print('NVR module not detected. Functionality will be disabled.')
 # other DR methods
 from umap import UMAP                                   # UMAP
 
@@ -199,7 +206,7 @@ class couscous():
 
         # then subset data by rank-ordered barcode appearance
         if ranks=='all':
-            return distance_matrix(transformed, transformed)
+            return cdist(transformed, transformed)
 
         elif not isinstance(ranks, (list,)): # make sure input is list-formatted
             ranks = [ranks]
@@ -209,7 +216,7 @@ class couscous():
         IDs = [x for x in ranks if type(x)==str] # pull out any specific barcode IDs
         ranks_i = self.barcodes.value_counts()[self.barcodes.value_counts().rank(axis=0, method='min', ascending=False).isin(ints)].index
         ranks_counts = transformed[np.array(self.barcodes.isin(list(ranks_i) + IDs))] # subset transformed data
-        return distance_matrix(ranks_counts, ranks_counts)
+        return cdist(ranks_counts, ranks_counts)
 
 
     def barcode_dist_matrix(self, ranks, data_type='counts', transform=None, **kwargs):
@@ -238,7 +245,7 @@ class couscous():
 
         ranks_0 = transformed[np.array(self.barcodes.isin(list(ranks[0])))] # subset transformed counts array to first barcode ID
         ranks_1 = transformed[np.array(self.barcodes.isin(list(ranks[1])))] # subset transformed counts array to second barcode ID
-        return distance_matrix(ranks_0, ranks_1)
+        return cdist(ranks_0, ranks_1)
 
 
     def knn_graph(self, k, data_type='counts', **kwargs):
@@ -451,7 +458,7 @@ class couscous():
         else:
             dim_name = data_type
 
-        plot_DR(data=plotter, color=color, pt_size=pt_size, dim_name=dim_name, figsize=figsize, legend=legend, save_to=save_to)
+        DR_plot(dim_name=dim_name, figsize=figsize).plot(data=plotter, color=color, pt_size=pt_size, legend=legend, save_to=save_to)
 
 
     def plot_barcodes(self, data_type, ranks='all', pt_size=75, legend=None, save_to=None, figsize=(5,5)):
@@ -951,7 +958,7 @@ def cluster_arrangement(pre_obj, post_obj, pre_type, post_type, clusters, cluste
     post_norm_1_2 = post_norm[post_0_1.shape[0]+post_0_2.shape[0]:]
 
     # calculate EMD and Pearson correlation stats
-    EMD = [wasserstein_distance(dist_norm_0_1, post_norm_0_1), wasserstein_distance(dist_norm_0_2, post_norm_0_2), wasserstein_distance(dist_norm_1_2, post_norm_1_2)]
+    EMD = [wasserstein_1d(dist_norm_0_1, post_norm_0_1), wasserstein_1d(dist_norm_0_2, post_norm_0_2), wasserstein_1d(dist_norm_1_2, post_norm_1_2)]
     corr_stats = [pearsonr(x=dist_0_1, y=post_0_1)[0], pearsonr(x=dist_0_2, y=post_0_2)[0], pearsonr(x=dist_1_2, y=post_1_2)[0]]
 
     # generate jointplot
