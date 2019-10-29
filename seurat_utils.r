@@ -1,4 +1,4 @@
-# R utility functions
+# Seurat utility functions
 
 # @author: C Heiser
 # August 2019
