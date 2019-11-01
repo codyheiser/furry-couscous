@@ -56,7 +56,7 @@ def bin_threshold(mat, threshmin=None, threshmax=0.5):
 
 
 # furry-couscous manuscript functions
-def distance_stats(pre, post, downsample=False):
+def distance_stats(pre, post, downsample=False, verbose=True):
     '''
     test for correlation between Euclidean cell-cell distances before and after transformation by a function or DR algorithm.
     1) performs Pearson correlation of distance distributions
@@ -65,26 +65,35 @@ def distance_stats(pre, post, downsample=False):
         pre = vector of unique distances (pdist()) or distance matrix of shape (n_cells, m_cells) (cdist()) before transformation/projection
         post = vector of unique distances (pdist()) distance matrix of shape (n_cells, m_cells) (cdist()) after transformation/projection
         downsample = number of distances to downsample to (maximum of 50M [~10k cells, if symmetrical] is recommended for performance)
+        verbose = print progress statements
     '''
     # make sure the number of cells in each matrix is the same
     assert pre.shape == post.shape , 'Matrices contain different number of distances.\n{} in "pre"\n{} in "post"\n'.format(pre.shape[0], post.shape[0])
 
     # if distance matrix (mA x mB, result of cdist), flatten to unique cell-cell distances
     if pre.ndim==2:
+        if verbose:
+            print('Flattening distance matrices into 1D array of unique cell-cell distances...')
         pre = pre.flatten()
         post = post.flatten()
 
     # if dataset is large, randomly downsample to reasonable number of cells for calculation
     if downsample:
         assert downsample < len(pre), 'Must provide downsample value smaller than total number of cell-cell distances provided in pre and post'
+        if verbose:
+            print('Downsampling to {} total cell-cell distances...'.format(downsample))
         idx = np.random.choice(np.arange(len(pre)), downsample, replace=False)
         pre = pre[idx]
         post = post[idx]
 
     # calculate correlation coefficient using Pearson correlation
+    if verbose:
+        print('Correlating distances')
     corr_stats = pearsonr(x=pre, y=post)
 
     # min-max normalization for fair comparison of probability distributions
+    if verbose:
+        print('Normalizing unique distances')
     pre -= pre.min()
     pre /= pre.ptp()
 
@@ -92,9 +101,81 @@ def distance_stats(pre, post, downsample=False):
     post /= post.ptp()
 
     # calculate EMD for the distance matrices
-    EMD = wasserstein_1d(pre, post)
+    # by default, downsample to 50M distances to speed processing time, since this function often breaks with larger distributions
+    if verbose:
+        print("Calculating Earth-Mover's Distance between distributions")
+    if len(pre) > 50000000:
+        idx = np.random.choice(np.arange(len(pre)), 50000000, replace=False)
+        pre_EMD = pre[idx]
+        post_EMD = post[idx]
+        EMD = wasserstein_1d(pre_EMD, post_EMD)
+    else:
+        EMD = wasserstein_1d(pre, post)
 
     return pre, post, corr_stats, EMD
+
+
+def knn_preservation(pre, post):
+    '''
+    test for k-nearest neighbor preservation (%) before and after transformation by a function or DR algorithm.
+        pre = Knn graph of shape (n_cells, n_cells) before transformation/projection
+        post = Knn graph of shape (n_cells, n_cells) after transformation/projection
+    '''
+    # make sure the number of cells in each matrix is the same
+    assert pre.shape == post.shape , 'Matrices contain different number of cells.\n{} in "pre"\n{} in "post"\n'.format(pre.shape[0], post.shape[0])
+    return np.round(100 - ((pre != post).sum()/(pre.shape[0]**2))*100, 4)
+
+
+def structure_preservation_sc(adata, latent, native='X', k=30, downsample=False, verbose=True):
+    '''
+    wrapper function for full structural preservation workflow applied to scanpy AnnData object
+        adata = AnnData object with latent space to test in .obsm slot, and native (reference) space in .X or .obsm
+        latent = adata.obsm key that contains low-dimensional latent space for testing
+        native = adata.obsm key or .X containing high-dimensional native space, which should be direct input to dimension reduction
+                 that generated latent .obsm for fair comparison. Default 'X', which uses adata.X.
+        k = number of nearest neighbors to test preservation
+        downsample = number of distances to downsample to (maximum of 50M [~10k cells, if symmetrical] is recommended for performance)
+        verbose = print progress statements
+    '''
+    # 0) determine native space according to argument
+    if native == 'X':
+        native_space = adata.X.copy()
+    else:
+        native_space = adata.obsm[native].copy()
+    
+    # 1) calculate unique cell-cell distances
+    if '{}_distances'.format(native) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
+        if verbose:
+            print('Calculating unique distances for native space, {}'.format(native))
+        adata.uns['{}_distances'.format(native)] = pdist(native_space)
+    
+    if '{}_distances'.format(latent) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
+        if verbose:
+            print('Calculating unique distances for latent space, {}'.format(latent))
+        adata.uns['{}_distances'.format(latent)] = pdist(adata.obsm[latent])
+    
+    # 2) get correlation and EMD values, and return normalized distance vectors for plotting distributions
+    adata.uns['{}_norm_distances'.format(native)], adata.uns['{}_norm_distances'.format(latent)], corr_stats, EMD = distance_stats(pre=adata.uns['{}_distances'.format(native)], post=adata.uns['{}_distances'.format(latent)], verbose=verbose, downsample=downsample)
+
+    # 3) determine neighbors
+    if '{}_neighbors'.format(native) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
+        if verbose:
+            print('k-nearest neighbor calculation for native space, {}'.format(native))
+        adata.uns['{}_neighbors'.format(native)] = sc.pp.neighbors(adata, n_neighbors=k, use_rep=native, knn=True, metric='euclidean', copy=True).uns['neighbors']
+    
+    if '{}_neighbors'.format(latent) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
+        if verbose:
+            print('k-nearest neighbor calculation for latent space, {}'.format(latent))
+        adata.uns['{}_neighbors'.format(latent)] = sc.pp.neighbors(adata, n_neighbors=k, use_rep=latent, knn=True, metric='euclidean', copy=True).uns['neighbors']
+
+    # 4) calculate neighbor preservation
+    if verbose:
+        print('Determining nearest neighbor preservation')
+    knn_pres = knn_preservation(pre=adata.uns['{}_neighbors'.format(native)]['distances'], post=adata.uns['{}_neighbors'.format(latent)]['distances'])
+
+    if verbose:
+        print('Done!')
+    return corr_stats, EMD, knn_pres
 
 
 def plot_cell_distances(pre_norm, post_norm, save_to=None):
@@ -184,52 +265,6 @@ def joint_plot_distance_correlation(pre_norm, post_norm, figsize=(4,4)):
     plt.xlabel('Pre-Transformation', fontsize=14)
     plt.ylabel('Post-Transformation', fontsize=14)
     plt.tick_params(labelleft=False, labelbottom=False)
-
-
-def compare_euclid(pre, post, plot_out=True):
-    '''
-    wrapper function for performing Mantel/Pearson correlation, EMD, and plotting outputs
-        pre = distance matrix of shape (n_cells, n_cells) before transformation/projection
-        post = distance matrix of shape (n_cells, n_cells) after transformation/projection
-        plot_out = print plots as well as return stats?
-    '''
-    pre_flat_norm, post_flat_norm, corr_stats, EMD = distance_stats(pre, post)
-
-    if plot_out:
-        plt.figure(figsize=(15,5))
-
-        plt.subplot(131)
-        plot_distributions(pre_flat_norm, post_flat_norm)
-        plt.title('Distance Distribution', fontsize=16)
-
-        plt.subplot(132)
-        plot_cumulative_distributions(pre_flat_norm, post_flat_norm)
-        plt.title('Cumulative Distance Distribution', fontsize=16)
-
-        plt.subplot(133)
-        # plot correlation of distances
-        plot_distance_correlation(pre_flat_norm, post_flat_norm)
-        plt.title('Normalized Distance Correlation', fontsize=16)
-
-        # add statistics as plot annotations
-        plt.figtext(0.99, 0.15, 'R: {}\nn: {}'.format(round(corr_stats[0],4), corr_stats[2]), fontsize=14)
-        plt.figtext(0.60, 0.15, 'EMD: {}'.format(round(EMD,4)), fontsize=14)
-
-        plt.tight_layout()
-        plt.show()
-
-    return corr_stats, EMD
-
-
-def knn_preservation(pre, post):
-    '''
-    test for k-nearest neighbor preservation (%) before and after transformation by a function or DR algorithm.
-        pre = Knn graph of shape (n_cells, n_cells) before transformation/projection
-        post = Knn graph of shape (n_cells, n_cells) after transformation/projection
-    '''
-    # make sure the number of cells in each matrix is the same
-    assert pre.shape == post.shape , 'Matrices contain different number of cells.\n{} in "pre"\n{} in "post"\n'.format(pre.shape[0], post.shape[0])
-    return np.round(((pre == post).sum()/pre.shape[0]**2)*100, 4)
 
 
 def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,6), legend=True):
