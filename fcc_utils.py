@@ -303,7 +303,7 @@ def structure_preservation_sc(adata, latent, native='X', k=30, downsample=False,
     knn_pres = knn_preservation(pre=adata.uns['{}_neighbors'.format(native)]['distances'], post=adata.uns['{}_neighbors'.format(latent)]['distances'])
 
     if verbose:
-        print('\nDone!')
+        print('Done!')
     return corr_stats, EMD, knn_pres
 
 
