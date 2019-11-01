@@ -378,12 +378,12 @@ def structure_preservation_sc(adata, latent, native='X', k=30, downsample=False,
     # 3) determine neighbors
     if '{}_neighbors'.format(native) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
         if verbose:
-            print('k-nearest neighbor calculation for {}'.format(native))
+            print('k-nearest neighbor calculation for native space, {}'.format(native))
         adata.uns['{}_neighbors'.format(native)] = sc.pp.neighbors(adata, n_neighbors=k, use_rep=native, knn=True, metric='euclidean', copy=True).uns['neighbors']
     
     if '{}_neighbors'.format(latent) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
         if verbose:
-            print('k-nearest neighbor calculation for {}'.format(latent))
+            print('k-nearest neighbor calculation for latent space, {}'.format(latent))
         adata.uns['{}_neighbors'.format(latent)] = sc.pp.neighbors(adata, n_neighbors=k, use_rep=latent, knn=True, metric='euclidean', copy=True).uns['neighbors']
 
     # 4) calculate neighbor preservation
