@@ -255,6 +255,58 @@ def knn_preservation(pre, post):
     return np.round(100 - ((pre != post).sum()/(pre.shape[0]**2))*100, 4)
 
 
+def structure_preservation_sc(adata, latent, native='X', k=30, downsample=False, verbose=True):
+    '''
+    wrapper function for full structural preservation workflow applied to scanpy AnnData object
+        adata = AnnData object with latent space to test in .obsm slot, and native (reference) space in .X or .obsm
+        latent = adata.obsm key that contains low-dimensional latent space for testing
+        native = adata.obsm key or .X containing high-dimensional native space, which should be direct input to dimension reduction
+                 that generated latent .obsm for fair comparison. Default 'X', which uses adata.X.
+        k = number of nearest neighbors to test preservation
+        downsample = number of distances to downsample to (maximum of 50M [~10k cells, if symmetrical] is recommended for performance)
+        verbose = print progress statements
+    '''
+    # 0) determine native space according to argument
+    if native == 'X':
+        native_space = adata.X.copy()
+    else:
+        native_space = adata.obsm[native].copy()
+    
+    # 1) calculate unique cell-cell distances
+    if '{}_distances'.format(native) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
+        if verbose:
+            print('Calculating unique distances for native space, {}'.format(native))
+        adata.uns['{}_distances'.format(native)] = pdist(native_space)
+    
+    if '{}_distances'.format(latent) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
+        if verbose:
+            print('Calculating unique distances for latent space, {}'.format(latent))
+        adata.uns['{}_distances'.format(latent)] = pdist(adata.obsm[latent])
+    
+    # 2) get correlation and EMD values, and return normalized distance vectors for plotting distributions
+    adata.uns['{}_norm_distances'.format(native)], adata.uns['{}_norm_distances'.format(latent)], corr_stats, EMD = distance_stats(pre=adata.uns['{}_distances'.format(native)], post=adata.uns['{}_distances'.format(latent)], verbose=verbose, downsample=downsample)
+
+    # 3) determine neighbors
+    if '{}_neighbors'.format(native) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
+        if verbose:
+            print('k-nearest neighbor calculation for native space, {}'.format(native))
+        adata.uns['{}_neighbors'.format(native)] = sc.pp.neighbors(adata, n_neighbors=k, use_rep=native, knn=True, metric='euclidean', copy=True).uns['neighbors']
+    
+    if '{}_neighbors'.format(latent) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
+        if verbose:
+            print('k-nearest neighbor calculation for latent space, {}'.format(latent))
+        adata.uns['{}_neighbors'.format(latent)] = sc.pp.neighbors(adata, n_neighbors=k, use_rep=latent, knn=True, metric='euclidean', copy=True).uns['neighbors']
+
+    # 4) calculate neighbor preservation
+    if verbose:
+        print('Determining nearest neighbor preservation')
+    knn_pres = knn_preservation(pre=adata.uns['{}_neighbors'.format(native)]['distances'], post=adata.uns['{}_neighbors'.format(latent)]['distances'])
+
+    if verbose:
+        print('\nDone!')
+    return corr_stats, EMD, knn_pres
+
+
 def plot_cell_distances(pre_norm, post_norm):
     '''
     plot all unique cell-cell distances before and after some transformation. 
@@ -342,58 +394,6 @@ def joint_plot_distance_correlation(pre_norm, post_norm, figsize=(4,4)):
     plt.xlabel('Pre-Transformation', fontsize=14)
     plt.ylabel('Post-Transformation', fontsize=14)
     plt.tick_params(labelleft=False, labelbottom=False)
-
-
-def structure_preservation_sc(adata, latent, native='X', k=30, downsample=False, verbose=True):
-    '''
-    wrapper function for full structural preservation workflow applied to scanpy AnnData object
-        adata = AnnData object with latent space to test in .obsm slot, and native (reference) space in .X or .obsm
-        latent = adata.obsm key that contains low-dimensional latent space for testing
-        native = adata.obsm key or .X containing high-dimensional native space, which should be direct input to dimension reduction
-                 that generated latent .obsm for fair comparison. Default 'X', which uses adata.X.
-        k = number of nearest neighbors to test preservation
-        downsample = number of distances to downsample to (maximum of 50M [~10k cells, if symmetrical] is recommended for performance)
-        verbose = print progress statements
-    '''
-    # 0) determine native space according to argument
-    if native == 'X':
-        native_space = adata.X.copy()
-    else:
-        native_space = adata.obsm[native].copy()
-    
-    # 1) calculate unique cell-cell distances
-    if '{}_distances'.format(native) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
-        if verbose:
-            print('Calculating unique distances for native space, {}'.format(native))
-        adata.uns['{}_distances'.format(native)] = pdist(native_space)
-    
-    if '{}_distances'.format(latent) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
-        if verbose:
-            print('Calculating unique distances for latent space, {}'.format(latent))
-        adata.uns['{}_distances'.format(latent)] = pdist(adata.obsm[latent])
-    
-    # 2) get correlation and EMD values, and return normalized distance vectors for plotting distributions
-    adata.uns['{}_norm_distances'.format(native)], adata.uns['{}_norm_distances'.format(latent)], corr_stats, EMD = distance_stats(pre=adata.uns['{}_distances'.format(native)], post=adata.uns['{}_distances'.format(latent)], verbose=verbose, downsample=downsample)
-
-    # 3) determine neighbors
-    if '{}_neighbors'.format(native) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
-        if verbose:
-            print('k-nearest neighbor calculation for native space, {}'.format(native))
-        adata.uns['{}_neighbors'.format(native)] = sc.pp.neighbors(adata, n_neighbors=k, use_rep=native, knn=True, metric='euclidean', copy=True).uns['neighbors']
-    
-    if '{}_neighbors'.format(latent) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
-        if verbose:
-            print('k-nearest neighbor calculation for latent space, {}'.format(latent))
-        adata.uns['{}_neighbors'.format(latent)] = sc.pp.neighbors(adata, n_neighbors=k, use_rep=latent, knn=True, metric='euclidean', copy=True).uns['neighbors']
-
-    # 4) calculate neighbor preservation
-    if verbose:
-        print('Determining nearest neighbor preservation')
-    knn_pres = knn_preservation(pre=adata.uns['{}_neighbors'.format(native)]['distances'], post=adata.uns['{}_neighbors'.format(latent)]['distances'])
-
-    if verbose:
-        print('\nDone!')
-    return corr_stats, EMD, knn_pres
 
 
 def cluster_arrangement(pre_obj, post_obj, clusters, cluster_names, figsize=(6,6), pre_transform='arcsinh', legend=True):
