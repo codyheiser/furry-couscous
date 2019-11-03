@@ -267,7 +267,7 @@ def joint_plot_distance_correlation(pre_norm, post_norm, figsize=(4,4)):
     plt.tick_params(labelleft=False, labelbottom=False)
 
 
-def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,6), legend=True):
+def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names=None, figsize=(6,6), legend=True):
     '''
     determine pairwise distance preservation between 3 IDs from adata.obs[obs_col]
         adata = anndata object to pull dimensionality reduction from
@@ -280,9 +280,9 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,
         save_to = path to .png file to save output, or None
     '''
     # distance calculations for pre_obj
-    dist_0_1 = pdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[1]])
-    dist_0_2 = pdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[2]])
-    dist_1_2 = pdist(pre[adata.obs[obs_col]==IDs[1]], pre[adata.obs[obs_col]==IDs[2]])
+    dist_0_1 = pdist(pre[adata.obs[obs_col]==IDs[0]])
+    dist_0_2 = pdist(pre[adata.obs[obs_col]==IDs[0]])
+    dist_1_2 = pdist(pre[adata.obs[obs_col]==IDs[1]])
     # combine and min-max normalize
     dist = np.append(np.append(dist_0_1,dist_0_2), dist_1_2)
     dist -= dist.min()
@@ -293,9 +293,9 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,
     dist_norm_1_2 = dist[dist_0_1.shape[0]+dist_0_2.shape[0]:]
 
     # distance calculations for post_obj
-    post_0_1 = pdist(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[1]])
-    post_0_2 = pdist(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[2]])
-    post_1_2 = pdist(post[adata.obs[obs_col]==IDs[1]], post[adata.obs[obs_col]==IDs[2]])
+    post_0_1 = pdist(post[adata.obs[obs_col]==IDs[0]])
+    post_0_2 = pdist(post[adata.obs[obs_col]==IDs[0]])
+    post_1_2 = pdist(post[adata.obs[obs_col]==IDs[1]])
     # combine and min-max normalize
     post = np.append(np.append(post_0_1,post_0_2), post_1_2)
     post -= post.min()
@@ -308,6 +308,9 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,
     # calculate EMD and Pearson correlation stats
     EMD = [wasserstein_1d(dist_norm_0_1, post_norm_0_1), wasserstein_1d(dist_norm_0_2, post_norm_0_2), wasserstein_1d(dist_norm_1_2, post_norm_1_2)]
     corr_stats = [pearsonr(x=dist_0_1, y=post_0_1)[0], pearsonr(x=dist_0_2, y=post_0_2)[0], pearsonr(x=dist_1_2, y=post_1_2)[0]]
+
+    if ID_names is None:
+        ID_names = IDs.copy()
 
     # generate jointplot
     g = sns.JointGrid(x=dist, y=post, space=0, height=figsize[0])
@@ -325,4 +328,4 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,
     plt.ylabel('Post-Transformation', fontsize=14)
     plt.tick_params(labelleft=False, labelbottom=False)
 
-    return EMD, corr_stats
+    return corr_stats, EMD

@@ -21,7 +21,8 @@ from sklearn.neighbors import kneighbors_graph          # simple K-nearest neigh
 import matplotlib.pyplot as plt
 import seaborn as sns; sns.set(style = 'white')
 # utility functions
-from fcc_utils import DR_plot, bin_threshold
+from fcc_utils import bin_threshold
+from scanpy_utils import DR_plot
 # packages for reading in data files
 import os
 # scikit packages
