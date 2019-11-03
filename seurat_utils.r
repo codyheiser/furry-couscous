@@ -1,14 +1,13 @@
 # Seurat utility functions
-
 # @author: C Heiser
-# August 2019
+# November 2019
 
 require(tidyverse)
 require(Seurat)
-require(scatterpie)
-require(ggpubr)
 # plotting preferences
 source('ggplot_config.r')
+require(scatterpie)
+require(ggpubr)
 
 
 remove.zeros <- function(counts, margin=1){

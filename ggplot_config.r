@@ -1,8 +1,7 @@
-#========================= GGPLOT2 CONFIG =========================#
-# The following functions are for preferences and common settings
-#   for use with ggplot2 visualization package in R
+# Preferences and common settings for use with ggplot2 visualization package in R
+# @author: C Heiser
+# November 2019
 
-# set up your workspace
 require('gplots')
 require('plotly')
 
