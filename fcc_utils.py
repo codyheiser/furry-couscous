@@ -396,82 +396,21 @@ def joint_plot_distance_correlation(pre_norm, post_norm, figsize=(4,4)):
     plt.tick_params(labelleft=False, labelbottom=False)
 
 
-def cluster_arrangement(pre_obj, post_obj, clusters, cluster_names, figsize=(6,6), pre_transform='arcsinh', legend=True):
-	'''
-    determine pairwise distance preservation between 3 clusters
-	    pre_obj = RNA_counts object
-	    post_obj = DR object
-	    clusters = list of barcode IDs i.e. ['0','1','2'] to calculate pairwise distances between clusters 0, 1 and 2
-	    cluster_names = list of cluster names for labeling i.e. ['Bipolar Cells','Rods','Amacrine Cells'] for clusters 0, 1 and 2, respectively
-	    figsize = size of output figure to plot
-	    pre_transform = apply transformation to pre_obj counts? (None, 'arcsinh', or 'log2')
-        legend = show legend on plot
-	'''
-	# distance calculations for pre_obj
-	dist_0_1 = pre_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[1]], transform=pre_transform).flatten()
-	dist_0_2 = pre_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[2]], transform=pre_transform).flatten()
-	dist_1_2 = pre_obj.barcode_distance_matrix(ranks=[clusters[1],clusters[2]], transform=pre_transform).flatten()
-	# combine and min-max normalize
-	dist = np.append(np.append(dist_0_1,dist_0_2), dist_1_2)
-	dist -= dist.min()
-	dist /= dist.ptp()
-	# split normalized distances by cluster pair
-	dist_norm_0_1 = dist[:dist_0_1.shape[0]]
-	dist_norm_0_2 = dist[dist_0_1.shape[0]:dist_0_1.shape[0]+dist_0_2.shape[0]]
-	dist_norm_1_2 = dist[dist_0_1.shape[0]+dist_0_2.shape[0]:]
-
-	# distance calculations for post_obj
-	post_0_1 = post_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[1]]).flatten()
-	post_0_2 = post_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[2]]).flatten()
-	post_1_2 = post_obj.barcode_distance_matrix(ranks=[clusters[1],clusters[2]]).flatten()
-	# combine and min-max normalize
-	post = np.append(np.append(post_0_1,post_0_2), post_1_2)
-	post -= post.min()
-	post /= post.ptp()
-	# split normalized distances by cluster pair
-	post_norm_0_1 = post[:post_0_1.shape[0]]
-	post_norm_0_2 = post[post_0_1.shape[0]:post_0_1.shape[0]+post_0_2.shape[0]]
-	post_norm_1_2 = post[post_0_1.shape[0]+post_0_2.shape[0]:]
-
-	# calculate EMD and Pearson correlation stats
-	EMD = [wasserstein_1d(dist_norm_0_1, post_norm_0_1), wasserstein_1d(dist_norm_0_2, post_norm_0_2), wasserstein_1d(dist_norm_1_2, post_norm_1_2)]
-	corr_stats = [pearsonr(x=dist_0_1, y=post_0_1)[0], pearsonr(x=dist_0_2, y=post_0_2)[0], pearsonr(x=dist_1_2, y=post_1_2)[0]]
-
-	# generate jointplot
-	g = sns.JointGrid(x=dist, y=post, space=0, height=figsize[0])
-	g.plot_joint(plt.hist2d, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
-	sns.kdeplot(dist_norm_0_1, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkorange', label=cluster_names[0]+' - '+cluster_names[1], legend=legend)
-	sns.kdeplot(dist_norm_0_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkgreen', label=cluster_names[0]+' - '+cluster_names[2], legend=legend)
-	sns.kdeplot(dist_norm_1_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkred', label=cluster_names[1]+' - '+cluster_names[2], legend=legend)
-	if legend:
-		g.ax_marg_x.legend(loc=(1.01,0.1))
-	sns.kdeplot(post_norm_0_1, shade=False, bw=0.01, vertical=True,  color='darkorange', ax=g.ax_marg_y)
-	sns.kdeplot(post_norm_0_2, shade=False, bw=0.01, vertical=True,  color='darkgreen', ax=g.ax_marg_y)
-	sns.kdeplot(post_norm_1_2, shade=False, bw=0.01, vertical=True,  color='darkred', ax=g.ax_marg_y)
-	g.ax_joint.plot(np.linspace(max(min(dist),min(post)),1,100), np.linspace(max(min(dist),min(post)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
-	plt.xlabel('Pre-Transformation', fontsize=14)
-	plt.ylabel('Post-Transformation', fontsize=14)
-	plt.tick_params(labelleft=False, labelbottom=False)
-
-	return EMD, corr_stats
-
-
-def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,6), legend=True):
+def cluster_arrangement(pre_obj, post_obj, clusters, cluster_names=None, figsize=(6,6), pre_transform='arcsinh', legend=True):
     '''
-    determine pairwise distance preservation between 3 IDs from adata.obs[obs_col]
-        adata = anndata object to pull dimensionality reduction from
-        pre = matrix to subset as pre-transformation (i.e. adata.X)
-        post = matrix to subset as pre-transformation (i.e. adata.obsm['X_pca'])
-        obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
-        IDs = list of THREE IDs to compare (i.e. [0,1,2])
-        figsize = size of resulting axes
-        legend = None, 'full', or 'brief'
-        save_to = path to .png file to save output, or None
+    determine pairwise distance preservation between 3 clusters
+        pre_obj = RNA_counts object
+        post_obj = DR object
+        clusters = list of barcode IDs i.e. ['0','1','2'] to calculate pairwise distances between clusters 0, 1 and 2
+        cluster_names = list of cluster names for labeling i.e. ['Bipolar Cells','Rods','Amacrine Cells'] for clusters 0, 1 and 2, respectively
+        figsize = size of output figure to plot
+        pre_transform = apply transformation to pre_obj counts? (None, 'arcsinh', or 'log2')
+        legend = show legend on plot
     '''
     # distance calculations for pre_obj
-    dist_0_1 = pdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[1]])
-    dist_0_2 = pdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[2]])
-    dist_1_2 = pdist(pre[adata.obs[obs_col]==IDs[1]], pre[adata.obs[obs_col]==IDs[2]])
+    dist_0_1 = pre_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[1]], transform=pre_transform).flatten()
+    dist_0_2 = pre_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[2]], transform=pre_transform).flatten()
+    dist_1_2 = pre_obj.barcode_distance_matrix(ranks=[clusters[1],clusters[2]], transform=pre_transform).flatten()
     # combine and min-max normalize
     dist = np.append(np.append(dist_0_1,dist_0_2), dist_1_2)
     dist -= dist.min()
@@ -482,9 +421,9 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,
     dist_norm_1_2 = dist[dist_0_1.shape[0]+dist_0_2.shape[0]:]
 
     # distance calculations for post_obj
-    post_0_1 = pdist(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[1]])
-    post_0_2 = pdist(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[2]])
-    post_1_2 = pdist(post[adata.obs[obs_col]==IDs[1]], post[adata.obs[obs_col]==IDs[2]])
+    post_0_1 = post_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[1]]).flatten()
+    post_0_2 = post_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[2]]).flatten()
+    post_1_2 = post_obj.barcode_distance_matrix(ranks=[clusters[1],clusters[2]]).flatten()
     # combine and min-max normalize
     post = np.append(np.append(post_0_1,post_0_2), post_1_2)
     post -= post.min()
@@ -497,6 +436,73 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,
     # calculate EMD and Pearson correlation stats
     EMD = [wasserstein_1d(dist_norm_0_1, post_norm_0_1), wasserstein_1d(dist_norm_0_2, post_norm_0_2), wasserstein_1d(dist_norm_1_2, post_norm_1_2)]
     corr_stats = [pearsonr(x=dist_0_1, y=post_0_1)[0], pearsonr(x=dist_0_2, y=post_0_2)[0], pearsonr(x=dist_1_2, y=post_1_2)[0]]
+    
+    if cluster_names is None:
+        cluster_names = clusters.copy()
+
+    # generate jointplot
+    g = sns.JointGrid(x=dist, y=post, space=0, height=figsize[0])
+    g.plot_joint(plt.hist2d, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
+    sns.kdeplot(dist_norm_0_1, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkorange', label=cluster_names[0]+' - '+cluster_names[1], legend=legend)
+    sns.kdeplot(dist_norm_0_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkgreen', label=cluster_names[0]+' - '+cluster_names[2], legend=legend)
+    sns.kdeplot(dist_norm_1_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkred', label=cluster_names[1]+' - '+cluster_names[2], legend=legend)
+    if legend:
+        g.ax_marg_x.legend(loc=(1.01,0.1))
+    sns.kdeplot(post_norm_0_1, shade=False, bw=0.01, vertical=True,  color='darkorange', ax=g.ax_marg_y)
+    sns.kdeplot(post_norm_0_2, shade=False, bw=0.01, vertical=True,  color='darkgreen', ax=g.ax_marg_y)
+    sns.kdeplot(post_norm_1_2, shade=False, bw=0.01, vertical=True,  color='darkred', ax=g.ax_marg_y)
+    g.ax_joint.plot(np.linspace(max(min(dist),min(post)),1,100), np.linspace(max(min(dist),min(post)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
+    plt.xlabel('Pre-Transformation', fontsize=14)
+    plt.ylabel('Post-Transformation', fontsize=14)
+    plt.tick_params(labelleft=False, labelbottom=False)
+
+    return EMD, corr_stats
+
+
+def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names=None, figsize=(6,6), legend=True):
+    '''
+    determine pairwise distance preservation between 3 IDs from adata.obs[obs_col]
+        adata = anndata object to pull dimensionality reduction from
+        pre = matrix to subset as pre-transformation (i.e. adata.X)
+        post = matrix to subset as pre-transformation (i.e. adata.obsm['X_pca'])
+        obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
+        IDs = list of THREE IDs to compare (i.e. [0,1,2])
+        figsize = size of resulting axes
+        legend = None, 'full', or 'brief'
+        save_to = path to .png file to save output, or None
+    '''
+    # distance calculations for pre_obj
+    dist_0_1 = pdist(pre[adata.obs[obs_col]==IDs[0]])
+    dist_0_2 = pdist(pre[adata.obs[obs_col]==IDs[0]])
+    dist_1_2 = pdist(pre[adata.obs[obs_col]==IDs[1]])
+    # combine and min-max normalize
+    dist = np.append(np.append(dist_0_1,dist_0_2), dist_1_2)
+    dist -= dist.min()
+    dist /= dist.ptp()
+    # split normalized distances by cluster pair
+    dist_norm_0_1 = dist[:dist_0_1.shape[0]]
+    dist_norm_0_2 = dist[dist_0_1.shape[0]:dist_0_1.shape[0]+dist_0_2.shape[0]]
+    dist_norm_1_2 = dist[dist_0_1.shape[0]+dist_0_2.shape[0]:]
+
+    # distance calculations for post_obj
+    post_0_1 = pdist(post[adata.obs[obs_col]==IDs[0]])
+    post_0_2 = pdist(post[adata.obs[obs_col]==IDs[0]])
+    post_1_2 = pdist(post[adata.obs[obs_col]==IDs[1]])
+    # combine and min-max normalize
+    post = np.append(np.append(post_0_1,post_0_2), post_1_2)
+    post -= post.min()
+    post /= post.ptp()
+    # split normalized distances by cluster pair
+    post_norm_0_1 = post[:post_0_1.shape[0]]
+    post_norm_0_2 = post[post_0_1.shape[0]:post_0_1.shape[0]+post_0_2.shape[0]]
+    post_norm_1_2 = post[post_0_1.shape[0]+post_0_2.shape[0]:]
+
+    # calculate EMD and Pearson correlation stats
+    EMD = [wasserstein_1d(dist_norm_0_1, post_norm_0_1), wasserstein_1d(dist_norm_0_2, post_norm_0_2), wasserstein_1d(dist_norm_1_2, post_norm_1_2)]
+    corr_stats = [pearsonr(x=dist_0_1, y=post_0_1)[0], pearsonr(x=dist_0_2, y=post_0_2)[0], pearsonr(x=dist_1_2, y=post_1_2)[0]]
+
+    if ID_names is None:
+        ID_names = IDs.copy()
 
     # generate jointplot
     g = sns.JointGrid(x=dist, y=post, space=0, height=figsize[0])
@@ -514,4 +520,4 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names, figsize=(6,
     plt.ylabel('Post-Transformation', fontsize=14)
     plt.tick_params(labelleft=False, labelbottom=False)
 
-    return EMD, corr_stats
+    return corr_stats, EMD
