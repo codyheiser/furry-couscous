@@ -9,6 +9,7 @@ October 2019
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import warnings
 # distance metric functions
 from scipy.stats import pearsonr                    # correlation coefficient
 from scipy.spatial.distance import pdist, cdist     # unique pairwise and crosswise distances
@@ -289,17 +290,19 @@ def structure_preservation_sc(adata, latent, native='X', k=30, downsample=False,
     # 3) determine neighbors
     if '{}_neighbors'.format(native) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
         if verbose:
-            print('k-nearest neighbor calculation for native space, {}'.format(native))
+            print('{}-nearest neighbor calculation for native space, {}'.format(k, native))
         adata.uns['{}_neighbors'.format(native)] = sc.pp.neighbors(adata, n_neighbors=k, use_rep=native, knn=True, metric='euclidean', copy=True).uns['neighbors']
     
     if '{}_neighbors'.format(latent) not in adata.uns.keys(): # check for existence in AnnData to prevent re-work
         if verbose:
-            print('k-nearest neighbor calculation for latent space, {}'.format(latent))
+            print('{}-nearest neighbor calculation for latent space, {}'.format(k, latent))
         adata.uns['{}_neighbors'.format(latent)] = sc.pp.neighbors(adata, n_neighbors=k, use_rep=latent, knn=True, metric='euclidean', copy=True).uns['neighbors']
 
     # 4) calculate neighbor preservation
     if verbose:
         print('Determining nearest neighbor preservation')
+    if adata.uns['{}_neighbors'.format(native)]['params']['n_neighbors'] != adata.uns['{}_neighbors'.format(latent)]['params']['n_neighbors']:
+        warnings.warn('Warning: Nearest-neighbor graphs constructed with different k values.\n\tk={} in "{}_neighbors", while k={} in "{}_neighbors."\n\tConsider re-generating neighbors graphs.'.format(adata.uns['{}_neighbors'.format(native)]['params']['n_neighbors'], native, adata.uns['{}_neighbors'.format(latent)]['params']['n_neighbors'], latent))
     knn_pres = knn_preservation(pre=adata.uns['{}_neighbors'.format(native)]['distances'], post=adata.uns['{}_neighbors'.format(latent)]['distances'])
 
     if verbose:
