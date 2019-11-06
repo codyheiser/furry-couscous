@@ -9,6 +9,7 @@ October 2019
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import networkx as nx
 from scipy.spatial.distance import cdist            # unique pairwise and crosswise distances
 from sklearn.neighbors import kneighbors_graph      # simple K-nearest neighbors graph
 # plotting packages
@@ -147,18 +148,20 @@ def find_centroids(adata, use_rep, obs_col='louvain'):
     '''
     find cluster centroids
         adata = AnnData object
-        use_rep = adata.obsm key containing space to calculate centroids in (i.e. 'X_pca')
+        use_rep = 'X' or adata.obsm key containing space to calculate centroids in (i.e. 'X_pca')
         obs_col = adata.obs column name containing cluster IDs
         save_rep = adata.uns key
     '''
-    # get unique cluster names
-    names = sorted(adata.obs[obs_col].unique())
     # calculate centroids
-    adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.obsm[use_rep][adata.obs[obs_col]==clu,:],axis=0) for clu in sorted(adata.obs[obs_col].unique())])
+    if use_rep == 'X':
+        adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.X[adata.obs[obs_col]==clu,:],axis=0) for clu in sorted(adata.obs[obs_col].unique())])
+    else:
+        adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.obsm[use_rep][adata.obs[obs_col]==clu,:],axis=0) for clu in sorted(adata.obs[obs_col].unique())])
     # calculate distances between all centroids
     adata.uns['{}_centroid_distances'.format(use_rep)] = cdist(adata.uns['{}_centroids'.format(use_rep)], adata.uns['{}_centroids'.format(use_rep)])
-    tmp = np.argsort(adata.uns['{}_centroid_distances'.format(use_rep)][0,])
-    adata.uns['{}_centroid_ranks'.format(use_rep)] = pd.DataFrame({use_rep:tmp.argsort()}, index=names)
+    # build networkx minimum spanning tree between centroids
+    G = nx.from_numpy_matrix(adata.uns['{}_centroid_distances'.format(use_rep)])
+    adata.uns['{}_centroid_MST'.format(use_rep)] = nx.minimum_spanning_tree(G)
 
 
 
@@ -238,21 +241,34 @@ class DR_plot():
             plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
     
 
-    def plot_centroids(self, adata, use_rep, obs_col, ctr_size=300, pt_size=75, legend=None, save_to=None):
+    def plot_centroids(self, adata, use_rep, obs_col, ctr_size=300, pt_size=75, draw_edges=True, highlight_edges=False, legend=None, save_to=None):
         '''
         general plotting function for dimensionality reduction outputs with cute arrows and labels
             adata = anndata object to pull dimensionality reduction from
             use_rep = adata.obsm key to plot from (i.e. 'X_pca')
             obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
+            ctr_size = size of centroid points in plot
             pt_size = size of points in plot
+            draw_edges = draw edges of minimum spanning tree between all centroids?
+            highlight_edges = list of edge IDs as tuples to highlight in red on plot
+                              e.g. set(adata.uns['X_tsne_centroid_MST'].edges).difference(set(adata.uns['X_umap_centroid_MST'].edges)) => {(0,3), (0,7)}
+                              says that edges from centroid 0 to 3 and 0 to 7 are found in 'X_tsne_centroids' but not in 'X_umap_centroids'. highlight the edges to show this.
             legend = None, 'full', or 'brief'
             save_to = path to .png file to save output, or None
         '''
-        points = adata.obsm[use_rep]
-        centroids = adata.uns['{}_centroids'.format(use_rep)]
+        # draw points in embedding first
+        sns.scatterplot(adata.obsm[use_rep][:,0], adata.obsm[use_rep][:,1], ax=self.ax, s=pt_size, alpha=0.1, color='gray', legend=False, edgecolor='none')
 
-        sns.scatterplot(points[:,0], points[:,1], ax=self.ax, s=pt_size, alpha=0.1, color='gray', legend=False, edgecolor='none')
-        sns.scatterplot(centroids[:,0], centroids[:,1], ax=self.ax, s=ctr_size, alpha=0.7, hue=sorted(adata.obs[obs_col].unique()), legend=legend, edgecolor='none', palette='plasma')
+        # draw MST edges if desired, otherwise just draw centroids
+        if not draw_edges:
+            sns.scatterplot(adata.uns['{}_centroids'.format(use_rep)][:,0], adata.uns['{}_centroids'.format(use_rep)][:,1], ax=self.ax, s=ctr_size, hue=sorted(adata.obs[obs_col].unique()), legend=legend, edgecolor='none', palette='plasma')
+        else:
+            pos = dict(zip(sorted(adata.obs[obs_col].unique()), adata.uns['{}_centroids'.format(use_rep)]))
+            nx.draw_networkx(adata.uns['{}_centroid_MST'.format(use_rep)], pos=pos, ax=self.ax, with_labels=False, width=2, node_size=ctr_size, node_color=sorted(adata.obs[obs_col].unique()), cmap='plasma')
+
+        # highlight edges if desired
+        if highlight_edges:
+            nx.draw_networkx_edges(adata.uns['{}_centroid_MST'.format(use_rep)], pos=pos, ax=self.ax, edgelist=highlight_edges, width=5, edge_color='red')
 
         if legend is not None:
             plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
