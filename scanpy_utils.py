@@ -263,12 +263,11 @@ class DR_plot():
         if not draw_edges:
             sns.scatterplot(adata.uns['{}_centroids'.format(use_rep)][:,0], adata.uns['{}_centroids'.format(use_rep)][:,1], ax=self.ax, s=ctr_size, hue=sorted(adata.obs[obs_col].unique()), legend=legend, edgecolor='none', palette='plasma')
         else:
-            pos = dict(zip(sorted(adata.obs[obs_col].unique()), adata.uns['{}_centroids'.format(use_rep)]))
+            pos = dict(zip(sorted(adata.obs[obs_col].unique()), adata.uns['{}_centroids'.format(use_rep)][:,:2]))
             nx.draw_networkx(adata.uns['{}_centroid_MST'.format(use_rep)], pos=pos, ax=self.ax, with_labels=False, width=2, node_size=ctr_size, node_color=sorted(adata.obs[obs_col].unique()), cmap='plasma')
-
-        # highlight edges if desired
-        if highlight_edges:
-            nx.draw_networkx_edges(adata.uns['{}_centroid_MST'.format(use_rep)], pos=pos, ax=self.ax, edgelist=highlight_edges, width=5, edge_color='red')
+            # highlight edges if desired
+            if highlight_edges:
+                nx.draw_networkx_edges(adata.uns['{}_centroid_MST'.format(use_rep)], pos=pos, ax=self.ax, edgelist=highlight_edges, width=5, edge_color='red')
 
         if legend is not None:
             plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
