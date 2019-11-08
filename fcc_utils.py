@@ -5,17 +5,16 @@ utility functions
 @author: C Heiser
 October 2019
 '''
-# basics
+import warnings
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import warnings
-# distance metric functions
-from scipy.stats import pearsonr                    # correlation coefficient
-from scipy.spatial.distance import pdist            # unique pairwise distances
-from ot import wasserstein_1d                       # POT implementation of Wasserstein distance between 1D arrays
-# plotting packages
-import matplotlib.pyplot as plt
+from ot import wasserstein_1d
+from scipy.spatial.distance import pdist
+from scipy.stats import pearsonr
+
 import seaborn as sns; sns.set(style = 'white')
 
 
