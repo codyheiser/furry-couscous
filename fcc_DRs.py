@@ -5,26 +5,23 @@ dimensionality reduction objects
 @author: C Heiser
 October 2019
 '''
-# packages for reading in data files
+import gzip
 import os
 import zipfile
-import gzip
-# basics
-import numpy as np
-import pandas as pd
-# scikit packages
-from sklearn.preprocessing import normalize
-from sklearn.decomposition import PCA			# PCA
-from sklearn.manifold import TSNE				# t-SNE
-from sklearn.model_selection import KFold		# K-fold cross-validation
-from sklearn.neighbors import kneighbors_graph	# K-nearest neighbors graph
-from sklearn.metrics import silhouette_score	# silhouette score
-from scipy.spatial.distance import pdist, cdist # unique pairwise and crosswise distances
-# density peak clustering
-from pydpc import Cluster						# density-peak clustering
-# plotting packages
+
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from pydpc import Cluster
+from scipy.spatial.distance import cdist, pdist
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from sklearn.metrics import silhouette_score
+from sklearn.model_selection import KFold
+from sklearn.neighbors import kneighbors_graph
+from sklearn.preprocessing import normalize
+
 import seaborn as sns; sns.set(style = 'white')
 
 # optional packages containing other DR methods #
@@ -624,7 +621,7 @@ class DR():
 		ax[0].scatter(self.results[:, 0], self.results[:, 1], s=75, alpha=0.7)
 		ax[0].scatter(self.results[self.clu.clusters, 0], self.results[self.clu.clusters, 1], s=90, c="red")
 		ax[1].scatter(self.results[:, 0], self.results[:, 1], s=75, alpha=0.7, c=self.clu.density)
-		ax[2].scatter(self.results[:, 0], self.results[:, 1], s=75, alpha=0.7, c=self.clu.membership, cmap=plt.cm.plasma)
+		ax[2].scatter(self.results[:, 0], self.results[:, 1], s=75, alpha=0.7, c=self.clu.membership, cmap="plasma")
 		IDs, counts = np.unique(self.clu.membership, return_counts=True) # get cluster counts and IDs
 		bbox_props = dict(boxstyle="round", fc="w", ec="0.5", alpha=0.9) # set up annotate box
 		# add percentages of each cluster to plot

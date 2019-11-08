@@ -5,19 +5,18 @@ utility functions
 @author: C Heiser
 October 2019
 '''
-# basics
+import warnings
+
+import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import networkx as nx
-import warnings
-# distance metric functions
-from scipy.stats import pearsonr                    # correlation coefficient
-from scipy.spatial.distance import pdist, cdist     # unique pairwise and crosswise distances
-from sklearn.neighbors import kneighbors_graph      # simple K-nearest neighbors graph
-from ot import wasserstein_1d                       # POT implementation of Wasserstein distance between 1D arrays
-# plotting packages
-import matplotlib.pyplot as plt
+from ot import wasserstein_1d
+from scipy.spatial.distance import cdist, pdist
+from scipy.stats import pearsonr
+from sklearn.neighbors import kneighbors_graph
+
 import seaborn as sns; sns.set(style = 'white')
 
 
@@ -64,7 +63,7 @@ def subset_uns_by_ID(adata, uns_keys, obs_col, IDs):
         adata.uns['{}_{}'.format(key, '_'.join([str(x) for x in IDs]))] = tmp # save new .uns key by appending IDs to original key name
 
 
-def find_centroids(adata, use_rep, obs_col='louvain'):
+def find_centroids(adata, use_rep, obs_col='louvain', IDs='all'):
     '''
     find cluster centroids
         adata = AnnData object
@@ -73,14 +72,16 @@ def find_centroids(adata, use_rep, obs_col='louvain'):
         save_rep = adata.uns key
     '''
     # calculate centroids
+    clu_names = adata.obs[obs_col].unique()
     if use_rep == 'X':
-        adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.X[adata.obs[obs_col]==clu,:],axis=0) for clu in sorted(adata.obs[obs_col].unique())])
+        adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.X[adata.obs[obs_col]==clu,:],axis=0) for clu in clu_names])
     else:
-        adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.obsm[use_rep][adata.obs[obs_col]==clu,:],axis=0) for clu in sorted(adata.obs[obs_col].unique())])
+        adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.obsm[use_rep][adata.obs[obs_col]==clu,:],axis=0) for clu in clu_names])
     # calculate distances between all centroids
     adata.uns['{}_centroid_distances'.format(use_rep)] = cdist(adata.uns['{}_centroids'.format(use_rep)], adata.uns['{}_centroids'.format(use_rep)])
     # build networkx minimum spanning tree between centroids
     G = nx.from_numpy_matrix(adata.uns['{}_centroid_distances'.format(use_rep)])
+    G = nx.relabel_nodes(G, mapping = dict(zip(list(G.nodes),clu_names)), copy = True)
     adata.uns['{}_centroid_MST'.format(use_rep)] = nx.minimum_spanning_tree(G)
 
 
@@ -99,6 +100,7 @@ class DR_plot():
         figsize = size of resulting axes
         '''
         self.fig, self.ax = plt.subplots(1, figsize=figsize)
+        self.cmap = plt.get_cmap('plasma')
 
         plt.xlabel('{} 1'.format(dim_name), fontsize=14)
         self.ax.xaxis.set_label_coords(0.2, -0.025)
@@ -133,7 +135,7 @@ class DR_plot():
             plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
     
 
-    def plot_IDs(self, adata, use_rep, obs_col, IDs='all', pt_size=75, legend=None, save_to=None):
+    def plot_IDs(self, adata, use_rep, obs_col, IDs='all', pt_size=75, save_to=None):
         '''
         general plotting function for dimensionality reduction outputs with cute arrows and labels
             adata = anndata object to pull dimensionality reduction from
@@ -141,20 +143,20 @@ class DR_plot():
             obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
             IDs = list of IDs to plot, graying out cells not assigned to those IDS (default 'all' IDs)
             pt_size = size of points in plot
-            legend = None, 'full', or 'brief'
             save_to = path to .png file to save output, or None
         '''
         plotter = adata.obsm[use_rep]
+        # get color mapping from obs_col
+        clu_names = adata.obs[obs_col].unique()
+        colors = self.cmap(np.linspace(0, 1, len(clu_names)))
+        cdict = dict(zip(clu_names, colors))
 
         if IDs == 'all':
-            sns.scatterplot(plotter[:,0], plotter[:,1], ax=self.ax, s=pt_size, alpha=0.7, hue=adata.obs[obs_col], legend=legend, edgecolor='none', palette='plasma')
+            self.ax.scatter(plotter[:,0], plotter[:,1], s=pt_size, alpha=0.7, c=[cdict[x] for x in adata.obs[obs_col]], edgecolor='none')
 
         else:
             sns.scatterplot(plotter[-adata.obs[obs_col].isin(IDs), 0], plotter[-adata.obs[obs_col].isin(IDs), 1], ax=self.ax, s=pt_size, alpha=0.1, color='gray', legend=False, edgecolor='none')
-            sns.scatterplot(plotter[adata.obs[obs_col].isin(IDs), 0], plotter[adata.obs[obs_col].isin(IDs), 1], ax=self.ax, s=pt_size, alpha=0.7, hue=adata.obs.loc[adata.obs[obs_col].isin(IDs), obs_col], legend=legend, edgecolor='none', palette='plasma')
-
-        if legend is not None:
-            plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
+            plt.scatter(plotter[adata.obs[obs_col].isin(IDs), 0], plotter[adata.obs[obs_col].isin(IDs), 1], s=pt_size, alpha=0.7, c=[cdict[x] for x in adata.obs.loc[adata.obs[obs_col].isin(IDs), obs_col]], edgecolor='none')
 
         if save_to is None:
             return
@@ -162,7 +164,7 @@ class DR_plot():
             plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
     
 
-    def plot_centroids(self, adata, use_rep, obs_col, ctr_size=300, pt_size=75, draw_edges=True, highlight_edges=False, legend=None, save_to=None):
+    def plot_centroids(self, adata, use_rep, obs_col, ctr_size=300, pt_size=75, draw_edges=True, highlight_edges=False, save_to=None):
         '''
         general plotting function for dimensionality reduction outputs with cute arrows and labels
             adata = anndata object to pull dimensionality reduction from
@@ -174,24 +176,24 @@ class DR_plot():
             highlight_edges = list of edge IDs as tuples to highlight in red on plot
                               e.g. set(adata.uns['X_tsne_centroid_MST'].edges).difference(set(adata.uns['X_umap_centroid_MST'].edges)) => {(0,3), (0,7)}
                               says that edges from centroid 0 to 3 and 0 to 7 are found in 'X_tsne_centroids' but not in 'X_umap_centroids'. highlight the edges to show this.
-            legend = None, 'full', or 'brief'
             save_to = path to .png file to save output, or None
         '''
+        # get color mapping from obs_col
+        clu_names = adata.obs[obs_col].unique()
+        colors = self.cmap(np.linspace(0, 1, len(clu_names)))
+        
         # draw points in embedding first
         sns.scatterplot(adata.obsm[use_rep][:,0], adata.obsm[use_rep][:,1], ax=self.ax, s=pt_size, alpha=0.1, color='gray', legend=False, edgecolor='none')
 
         # draw MST edges if desired, otherwise just draw centroids
         if not draw_edges:
-            sns.scatterplot(adata.uns['{}_centroids'.format(use_rep)][:,0], adata.uns['{}_centroids'.format(use_rep)][:,1], ax=self.ax, s=ctr_size, hue=sorted(adata.obs[obs_col].unique()), legend=legend, edgecolor='none', palette='plasma')
+            self.ax.scatter(adata.uns['{}_centroids'.format(use_rep)][:,0], adata.uns['{}_centroids'.format(use_rep)][:,1], s=ctr_size, c=colors, edgecolor='none')
         else:
-            pos = dict(zip(sorted(adata.obs[obs_col].unique()), adata.uns['{}_centroids'.format(use_rep)][:,:2]))
-            nx.draw_networkx(adata.uns['{}_centroid_MST'.format(use_rep)], pos=pos, ax=self.ax, with_labels=False, width=2, node_size=ctr_size, node_color=sorted(adata.obs[obs_col].unique()), cmap='plasma')
+            pos = dict(zip(clu_names, adata.uns['{}_centroids'.format(use_rep)][:,:2]))
+            nx.draw_networkx(adata.uns['{}_centroid_MST'.format(use_rep)], pos=pos, ax=self.ax, with_labels=False, width=2, node_size=ctr_size, node_color=colors)
             # highlight edges if desired
             if highlight_edges:
                 nx.draw_networkx_edges(adata.uns['{}_centroid_MST'.format(use_rep)], pos=pos, ax=self.ax, edgelist=highlight_edges, width=5, edge_color='red')
-
-        if legend is not None:
-            plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
 
         if save_to is None:
             return
@@ -476,7 +478,7 @@ def cluster_arrangement(pre_obj, post_obj, clusters, cluster_names=None, figsize
     plt.ylabel('Post-Transformation', fontsize=14)
     plt.tick_params(labelleft=False, labelbottom=False)
 
-    return EMD, corr_stats
+    return corr_stats, EMD
 
 
 def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names=None, figsize=(6,6), legend=True):
@@ -492,9 +494,9 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names=None, figsiz
         save_to = path to .png file to save output, or None
     '''
     # distance calculations for pre_obj
-    dist_0_1 = pdist(pre[adata.obs[obs_col]==IDs[0]])
-    dist_0_2 = pdist(pre[adata.obs[obs_col]==IDs[0]])
-    dist_1_2 = pdist(pre[adata.obs[obs_col]==IDs[1]])
+    dist_0_1 = cdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[1]]).flatten()
+    dist_0_2 = cdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[2]]).flatten()
+    dist_1_2 = cdist(pre[adata.obs[obs_col]==IDs[1]], pre[adata.obs[obs_col]==IDs[2]]).flatten()
     # combine and min-max normalize
     dist = np.append(np.append(dist_0_1,dist_0_2), dist_1_2)
     dist -= dist.min()
@@ -505,9 +507,9 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names=None, figsiz
     dist_norm_1_2 = dist[dist_0_1.shape[0]+dist_0_2.shape[0]:]
 
     # distance calculations for post_obj
-    post_0_1 = pdist(post[adata.obs[obs_col]==IDs[0]])
-    post_0_2 = pdist(post[adata.obs[obs_col]==IDs[0]])
-    post_1_2 = pdist(post[adata.obs[obs_col]==IDs[1]])
+    post_0_1 = cdist(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[1]]).flatten()
+    post_0_2 = cdist(post[adata.obs[obs_col]==IDs[0]], post[adata.obs[obs_col]==IDs[2]]).flatten()
+    post_1_2 = cdist(post[adata.obs[obs_col]==IDs[1]], post[adata.obs[obs_col]==IDs[2]]).flatten()
     # combine and min-max normalize
     post = np.append(np.append(post_0_1,post_0_2), post_1_2)
     post -= post.min()
