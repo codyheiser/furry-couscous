@@ -172,25 +172,27 @@ class DR_plot():
                  .plot_IDs(): plot one or more cluster IDs on top of an .obsm from an `AnnData` object
                  .plot_centroids(): plot cluster centroids defined using find_centroids() function on `AnnData` object
     '''
-    def __init__(self, dim_name='dim', figsize=(5,5)):
+    def __init__(self, dim_name='dim', figsize=(5,5), ax_labels=True):
         '''
         dim_name = how to label axes ('dim 1' on x and 'dim 2' on y by default)
         figsize = size of resulting axes
         '''
         self.fig, self.ax = plt.subplots(1, figsize=figsize)
+        self.cmap = plt.get_cmap('plasma')
 
-        plt.xlabel('{} 1'.format(dim_name), fontsize=14)
-        self.ax.xaxis.set_label_coords(0.2, -0.025)
-        plt.ylabel('{} 2'.format(dim_name), fontsize=14)
-        self.ax.yaxis.set_label_coords(-0.025, 0.2)
+        if ax_labels:
+            plt.xlabel('{} 1'.format(dim_name), fontsize=14)
+            self.ax.xaxis.set_label_coords(0.2, -0.025)
+            plt.ylabel('{} 2'.format(dim_name), fontsize=14)
+            self.ax.yaxis.set_label_coords(-0.025, 0.2)
 
-        plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
-        plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+            plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+            plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
 
         plt.tick_params(labelbottom=False, labelleft=False)
         sns.despine(left=True, bottom=True)
         plt.tight_layout()
-    
+
 
     def plot(self, data, color, pt_size=75, legend=None, save_to=None):
         '''
@@ -212,7 +214,7 @@ class DR_plot():
             plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
     
 
-    def plot_IDs(self, adata, use_rep, obs_col, IDs='all', pt_size=75, legend=None, save_to=None):
+    def plot_IDs(self, adata, use_rep, obs_col, IDs='all', pt_size=75, save_to=None):
         '''
         general plotting function for dimensionality reduction outputs with cute arrows and labels
             adata = anndata object to pull dimensionality reduction from
@@ -220,20 +222,20 @@ class DR_plot():
             obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
             IDs = list of IDs to plot, graying out cells not assigned to those IDS (default 'all' IDs)
             pt_size = size of points in plot
-            legend = None, 'full', or 'brief'
             save_to = path to .png file to save output, or None
         '''
         plotter = adata.obsm[use_rep]
+        # get color mapping from obs_col
+        clu_names = adata.obs[obs_col].unique()
+        colors = self.cmap(np.linspace(0, 1, len(clu_names)))
+        cdict = dict(zip(clu_names, colors))
 
         if IDs == 'all':
-            sns.scatterplot(plotter[:,0], plotter[:,1], ax=self.ax, s=pt_size, alpha=0.7, hue=adata.obs[obs_col], legend=legend, edgecolor='none', palette='plasma')
+            self.ax.scatter(plotter[:,0], plotter[:,1], s=pt_size, alpha=0.7, c=[cdict[x] for x in adata.obs[obs_col]], edgecolor='none')
 
         else:
             sns.scatterplot(plotter[-adata.obs[obs_col].isin(IDs), 0], plotter[-adata.obs[obs_col].isin(IDs), 1], ax=self.ax, s=pt_size, alpha=0.1, color='gray', legend=False, edgecolor='none')
-            sns.scatterplot(plotter[adata.obs[obs_col].isin(IDs), 0], plotter[adata.obs[obs_col].isin(IDs), 1], ax=self.ax, s=pt_size, alpha=0.7, hue=adata.obs.loc[adata.obs[obs_col].isin(IDs), obs_col], legend=legend, edgecolor='none', palette='plasma')
-
-        if legend is not None:
-            plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
+            plt.scatter(plotter[adata.obs[obs_col].isin(IDs), 0], plotter[adata.obs[obs_col].isin(IDs), 1], s=pt_size, alpha=0.7, c=[cdict[x] for x in adata.obs.loc[adata.obs[obs_col].isin(IDs), obs_col]], edgecolor='none')
 
         if save_to is None:
             return
@@ -241,7 +243,7 @@ class DR_plot():
             plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
     
 
-    def plot_centroids(self, adata, use_rep, obs_col, ctr_size=300, pt_size=75, draw_edges=True, highlight_edges=False, legend=None, save_to=None):
+    def plot_centroids(self, adata, use_rep, obs_col, ctr_size=300, pt_size=75, draw_edges=True, highlight_edges=False, save_to=None):
         '''
         general plotting function for dimensionality reduction outputs with cute arrows and labels
             adata = anndata object to pull dimensionality reduction from
@@ -253,24 +255,24 @@ class DR_plot():
             highlight_edges = list of edge IDs as tuples to highlight in red on plot
                               e.g. set(adata.uns['X_tsne_centroid_MST'].edges).difference(set(adata.uns['X_umap_centroid_MST'].edges)) => {(0,3), (0,7)}
                               says that edges from centroid 0 to 3 and 0 to 7 are found in 'X_tsne_centroids' but not in 'X_umap_centroids'. highlight the edges to show this.
-            legend = None, 'full', or 'brief'
             save_to = path to .png file to save output, or None
         '''
+        # get color mapping from obs_col
+        clu_names = adata.obs[obs_col].unique()
+        colors = self.cmap(np.linspace(0, 1, len(clu_names)))
+        
         # draw points in embedding first
         sns.scatterplot(adata.obsm[use_rep][:,0], adata.obsm[use_rep][:,1], ax=self.ax, s=pt_size, alpha=0.1, color='gray', legend=False, edgecolor='none')
 
         # draw MST edges if desired, otherwise just draw centroids
         if not draw_edges:
-            sns.scatterplot(adata.uns['{}_centroids'.format(use_rep)][:,0], adata.uns['{}_centroids'.format(use_rep)][:,1], ax=self.ax, s=ctr_size, hue=sorted(adata.obs[obs_col].unique()), legend=legend, edgecolor='none', palette='plasma')
+            self.ax.scatter(adata.uns['{}_centroids'.format(use_rep)][:,0], adata.uns['{}_centroids'.format(use_rep)][:,1], s=ctr_size, c=colors, edgecolor='none')
         else:
-            pos = dict(zip(sorted(adata.obs[obs_col].unique()), adata.uns['{}_centroids'.format(use_rep)][:,:2]))
-            nx.draw_networkx(adata.uns['{}_centroid_MST'.format(use_rep)], pos=pos, ax=self.ax, with_labels=False, width=2, node_size=ctr_size, node_color=sorted(adata.obs[obs_col].unique()), cmap='plasma')
+            pos = dict(zip(clu_names, adata.uns['{}_centroids'.format(use_rep)][:,:2]))
+            nx.draw_networkx(adata.uns['{}_centroid_MST'.format(use_rep)], pos=pos, ax=self.ax, with_labels=False, width=2, node_size=ctr_size, node_color=colors)
             # highlight edges if desired
             if highlight_edges:
                 nx.draw_networkx_edges(adata.uns['{}_centroid_MST'.format(use_rep)], pos=pos, ax=self.ax, edgelist=highlight_edges, width=5, edge_color='red')
-
-        if legend is not None:
-            plt.legend(bbox_to_anchor=(1,1,0.2,0.2), loc='lower left', frameon=False, fontsize='small')
 
         if save_to is None:
             return
