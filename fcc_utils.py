@@ -86,7 +86,7 @@ def find_centroids(adata, use_rep, obs_col='louvain', IDs='all'):
 
 
 
-# plotting class #
+# dimensionality reduction plotting class #
 class DR_plot():
     '''
     class defining pretty plots of dimension-reduced embeddings such as PCA, t-SNE, and UMAP
@@ -98,6 +98,7 @@ class DR_plot():
         '''
         dim_name = how to label axes ('dim 1' on x and 'dim 2' on y by default)
         figsize = size of resulting axes
+        ax_labels = draw arrows and dimension names in lower left corner of plot
         '''
         self.fig, self.ax = plt.subplots(1, figsize=figsize)
         self.cmap = plt.get_cmap('plasma')
@@ -330,96 +331,143 @@ def structure_preservation_sc(adata, latent, native='X', metric=None, k=30, down
     return corr_stats, EMD, knn_pres
 
 
-def plot_cell_distances(pre_norm, post_norm):
+
+# structure preservation plotting class #
+class SP_plot():
     '''
-    plot all unique cell-cell distances before and after some transformation. 
-    Executes matplotlib.pyplot.plot(), does not initialize figure.
+    class defining pretty plots of structural evaluation of dimension-reduced embeddings such as PCA, t-SNE, and UMAP
+    '''
+    def __init__(self, pre_norm, post_norm, figsize=(4,4), labels=['Native','Latent']):
+        '''
         pre_norm = flattened vector of normalized, unique cell-cell distances "pre-transformation".
             Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
         post_norm = flattened vector of normalized, unique cell-cell distances "post-transformation".
             Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-    '''
-    plt.plot(pre_norm, alpha=0.7, label='pre', color=sns.cubehelix_palette()[-1])
-    plt.plot(post_norm, alpha=0.7, label='post', color=sns.cubehelix_palette()[2])
-    plt.legend(loc='best',fontsize=14)
-    plt.tick_params(labelleft=False, labelbottom=False)
-    sns.despine()
+        figsize = size of resulting axes
+        labels = name of pre- and post-transformation spaces for legend (plot_cell_distances, plot_distributions, plot_cumulative_distributions) 
+            or axis labels (plot_distance_correlation, joint_plot_distance_correlation) as list of two strings. False to exclude labels.
+        '''
+        self.figsize = figsize
+        self.fig, self.ax = plt.subplots(1, figsize=self.figsize)
+        self.palette = sns.cubehelix_palette()
+        self.cmap = sns.cubehelix_palette(as_cmap=True)
+        self.pre = pre_norm
+        self.post = post_norm
+        self.labels = labels
+
+        plt.tick_params(labelbottom=False, labelleft=False)
+        sns.despine()
+        plt.tight_layout()
 
 
-def plot_distributions(pre_norm, post_norm):
-    '''
-    plot probability distributions for all unique cell-cell distances before and after some transformation. 
-    Executes matplotlib.pyplot.plot(), does not initialize figure.
-        pre_norm = flattened vector of normalized, unique cell-cell distances "pre-transformation".
-            Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-        post_norm = flattened vector of normalized, unique cell-cell distances "post-transformation".
-            Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-    '''
-    sns.distplot(pre_norm, hist=False, kde=True, label='pre', color=sns.cubehelix_palette()[-1])
-    sns.distplot(post_norm, hist=False, kde=True, label='post', color=sns.cubehelix_palette()[2])
-    plt.legend(loc='best',fontsize=14)
-    plt.tick_params(labelleft=False, labelbottom=False)
-    sns.despine()
+    def plot_cell_distances(self, legend=True, save_to=None):
+        '''
+        plot all unique cell-cell distances before and after some transformation.
+            legend = display legend on plot
+            save_to = path to .png file to save output, or None
+        '''
+        plt.plot(self.pre, alpha=0.7, label=self.labels[0], color=self.palette[-1])
+        plt.plot(self.post, alpha=0.7, label=self.labels[1], color=self.palette[2])
+        if legend:
+            plt.legend(loc='best',fontsize='xx-large')
+        else:
+            plt.legend()
+            self.ax.legend().remove()
+
+        if save_to is None:
+            return
+        else:
+            plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
 
 
-def plot_cumulative_distributions(pre_norm, post_norm):
-    '''
-    plot cumulative probability distributions for all unique cell-cell distances before and after some transformation. 
-    Executes matplotlib.pyplot.plot(), does not initialize figure.
-        pre_norm = flattened vector of normalized, unique cell-cell distances "pre-transformation".
-            Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-        post_norm = flattened vector of normalized, unique cell-cell distances "post-transformation".
-            Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-    '''
-    num_bins = int(len(pre_norm)/100)
-    pre_counts, pre_bin_edges = np.histogram (pre_norm, bins=num_bins)
-    pre_cdf = np.cumsum (pre_counts)
-    post_counts, post_bin_edges = np.histogram (post_norm, bins=num_bins)
-    post_cdf = np.cumsum (post_counts)
-    plt.plot(pre_bin_edges[1:], pre_cdf/pre_cdf[-1], label='pre', color=sns.cubehelix_palette()[-1])
-    plt.plot(post_bin_edges[1:], post_cdf/post_cdf[-1], label='post', color=sns.cubehelix_palette()[2])
-    plt.legend(loc='best',fontsize=14)
-    plt.tick_params(labelleft=False, labelbottom=False)
-    sns.despine()
+    def plot_distributions(self, legend=True, save_to=None):
+        '''
+        plot probability distributions for all unique cell-cell distances before and after some transformation.
+            legend = display legend on plot
+            save_to = path to .png file to save output, or None
+        '''
+        sns.distplot(self.pre, hist=False, kde=True, label=self.labels[0], color=self.palette[-1])
+        sns.distplot(self.post, hist=False, kde=True, label=self.labels[1], color=self.palette[2])
+        if legend:
+            plt.legend(loc='best',fontsize='xx-large')
+        else:
+            plt.legend()
+            self.ax.legend().remove()
+
+        if save_to is None:
+            return
+        else:
+            plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
 
 
-def plot_distance_correlation(pre_norm, post_norm):
-    '''
-    plot correlation of all unique cell-cell distances before and after some transformation. 
-    Executes matplotlib.pyplot.plot(), does not initialize figure.
-        pre_norm: flattened vector of normalized, unique cell-cell distances "pre-transformation".
-            Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-        post_norm: flattened vector of normalized, unique cell-cell distances "post-transformation".
-            Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-    '''
-    plt.hist2d(x=pre_norm, y=post_norm, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
-    plt.plot(np.linspace(max(min(pre_norm),min(post_norm)),1,100), np.linspace(max(min(pre_norm),min(post_norm)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
-    plt.xlabel('Pre-Transformation', fontsize=14)
-    plt.ylabel('Post-Transformation', fontsize=14)
-    plt.tick_params(labelleft=False, labelbottom=False)
-    sns.despine()
+    def plot_cumulative_distributions(self, legend=True, save_to=None):
+        '''
+        plot cumulative probability distributions for all unique cell-cell distances before and after some transformation.
+            legend = display legend on plot
+            save_to = path to .png file to save output, or None
+        '''
+        num_bins = int(len(self.pre)/100)
+        pre_counts, pre_bin_edges = np.histogram (self.pre, bins=num_bins)
+        pre_cdf = np.cumsum (pre_counts)
+        post_counts, post_bin_edges = np.histogram (self.post, bins=num_bins)
+        post_cdf = np.cumsum (post_counts)
+        plt.plot(pre_bin_edges[1:], pre_cdf/pre_cdf[-1], label=self.labels[0], color=self.palette[-1])
+        plt.plot(post_bin_edges[1:], post_cdf/post_cdf[-1], label=self.labels[1], color=self.palette[2])
+        if legend:
+            plt.legend(loc='best',fontsize='xx-large')
+        else:
+            plt.legend()
+            self.ax.legend().remove()
+
+        if save_to is None:
+            return
+        else:
+            plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
 
 
-def joint_plot_distance_correlation(pre_norm, post_norm, figsize=(4,4)):
-    '''
-    plot correlation of all unique cell-cell distances before and after some transformation. Includes marginal plots of each distribution.
-    Executes matplotlib.pyplot.plot(), does not initialize figure.
-        pre_norm = flattened vector of normalized, unique cell-cell distances "pre-transformation".
-            Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-        post_norm = flattened vector of normalized, unique cell-cell distances "post-transformation".
-            Upper triangle of cell-cell distance matrix, flattened to vector of shape ((n_cells^2)/2)-n_cells.
-    '''
-    g = sns.JointGrid(x=pre_norm, y=post_norm, space=0, height=figsize[0])
-    g.plot_joint(plt.hist2d, bins=50, cmap=sns.cubehelix_palette(as_cmap=True))
-    sns.kdeplot(pre_norm, color=sns.cubehelix_palette()[-1], shade=False, bw=0.01, ax=g.ax_marg_x)
-    sns.kdeplot(post_norm, color=sns.cubehelix_palette()[-1], shade=False, bw=0.01, vertical=True, ax=g.ax_marg_y)
-    g.ax_joint.plot(np.linspace(max(min(pre_norm),min(post_norm)),1,100), np.linspace(max(min(pre_norm),min(post_norm)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
-    plt.xlabel('Pre-Transformation', fontsize=14)
-    plt.ylabel('Post-Transformation', fontsize=14)
-    plt.tick_params(labelleft=False, labelbottom=False)
+    def plot_distance_correlation(self, save_to=None):
+        '''
+        plot correlation of all unique cell-cell distances before and after some transformation.
+            save_to = path to .png file to save output, or None
+        '''
+        plt.hist2d(x=self.pre, y=self.post, bins=50, cmap=self.cmap)
+        plt.plot(np.linspace(max(min(self.pre),min(self.post)),1,100), np.linspace(max(min(self.pre),min(self.post)),1,100), linestyle='dashed', color=self.palette[-1]) # plot identity line as reference for regression
+        if self.labels:
+            plt.xlabel(self.labels[0], fontsize='xx-large', color=self.palette[-1])
+            plt.ylabel(self.labels[1], fontsize='xx-large', color=self.palette[2])
+
+        if save_to is None:
+            return
+        else:
+            plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
 
 
-def cluster_arrangement(pre_obj, post_obj, clusters, cluster_names=None, figsize=(6,6), pre_transform='arcsinh', legend=True):
+    def joint_plot_distance_correlation(self, save_to=None):
+        '''
+        plot correlation of all unique cell-cell distances before and after some transformation. 
+        includes marginal plots of each distribution.
+            save_to = path to .png file to save output, or None
+        '''
+        plt.close() # close matplotlib figure from __init__() and start over with seaborn.JointGrid()
+        self.fig = sns.JointGrid(x=self.pre, y=self.post, space=0, height=self.figsize[0])
+        self.fig.plot_joint(plt.hist2d, bins=50, cmap=self.cmap)
+        sns.kdeplot(self.pre, color=self.palette[-1], shade=False, bw=0.01, ax=self.fig.ax_marg_x)
+        sns.kdeplot(self.post, color=self.palette[2], shade=False, bw=0.01, vertical=True, ax=self.fig.ax_marg_y)
+        self.fig.ax_joint.plot(np.linspace(max(min(self.pre),min(self.post)),1,100), np.linspace(max(min(self.pre),min(self.post)),1,100), linestyle='dashed', color=self.palette[-1]) # plot identity line as reference for regression
+        if self.labels:
+            plt.xlabel(self.labels[0], fontsize='xx-large', color=self.palette[-1])
+            plt.ylabel(self.labels[1], fontsize='xx-large', color=self.palette[2])
+
+        plt.tick_params(labelbottom=False, labelleft=False)
+
+        if save_to is None:
+            return
+        else:
+            plt.savefig(fname=save_to, transparent=True, bbox_inches='tight', dpi=1000)
+
+
+
+def cluster_arrangement(pre_obj, post_obj, clusters, cluster_names=None, figsize=(6,6), pre_transform='arcsinh', legend=True, ax_labels=['Native','Latent']):
     '''
     determine pairwise distance preservation between 3 clusters
         pre_obj = RNA_counts object
@@ -428,7 +476,8 @@ def cluster_arrangement(pre_obj, post_obj, clusters, cluster_names=None, figsize
         cluster_names = list of cluster names for labeling i.e. ['Bipolar Cells','Rods','Amacrine Cells'] for clusters 0, 1 and 2, respectively
         figsize = size of output figure to plot
         pre_transform = apply transformation to pre_obj counts? (None, 'arcsinh', or 'log2')
-        legend = show legend on plot
+        legend = display legend on plot
+        ax_labels = list of two strings for x and y axis labels, respectively. if False, exclude axis labels.
     '''
     # distance calculations for pre_obj
     dist_0_1 = pre_obj.barcode_distance_matrix(ranks=[clusters[0],clusters[1]], transform=pre_transform).flatten()
@@ -471,18 +520,21 @@ def cluster_arrangement(pre_obj, post_obj, clusters, cluster_names=None, figsize
     sns.kdeplot(dist_norm_1_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkred', label=cluster_names[1]+' - '+cluster_names[2], legend=legend)
     if legend:
         g.ax_marg_x.legend(loc=(1.01,0.1))
+
     sns.kdeplot(post_norm_0_1, shade=False, bw=0.01, vertical=True,  color='darkorange', ax=g.ax_marg_y)
     sns.kdeplot(post_norm_0_2, shade=False, bw=0.01, vertical=True,  color='darkgreen', ax=g.ax_marg_y)
     sns.kdeplot(post_norm_1_2, shade=False, bw=0.01, vertical=True,  color='darkred', ax=g.ax_marg_y)
     g.ax_joint.plot(np.linspace(max(min(dist),min(post)),1,100), np.linspace(max(min(dist),min(post)),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
-    plt.xlabel('Pre-Transformation', fontsize=14)
-    plt.ylabel('Post-Transformation', fontsize=14)
+    if ax_labels:
+        plt.xlabel(ax_labels[0], fontsize='xx-large', color=sns.cubehelix_palette()[-1])
+        plt.ylabel(ax_labels[1], fontsize='xx-large', color=sns.cubehelix_palette()[2])
+
     plt.tick_params(labelleft=False, labelbottom=False)
 
     return corr_stats, EMD
 
 
-def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names=None, figsize=(6,6), legend=True):
+def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names=None, figsize=(6,6), legend=True, ax_labels=['Native','Latent']):
     '''
     determine pairwise distance preservation between 3 IDs from adata.obs[obs_col]
         adata = anndata object to pull dimensionality reduction from
@@ -491,8 +543,8 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names=None, figsiz
         obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
         IDs = list of THREE IDs to compare (i.e. [0,1,2])
         figsize = size of resulting axes
-        legend = None, 'full', or 'brief'
-        save_to = path to .png file to save output, or None
+        legend = display legend on plot
+        ax_labels = list of two strings for x and y axis labels, respectively. if False, exclude axis labels.
     '''
     # distance calculations for pre_obj
     dist_0_1 = cdist(pre[adata.obs[obs_col]==IDs[0]], pre[adata.obs[obs_col]==IDs[1]]).flatten()
@@ -535,12 +587,15 @@ def cluster_arrangement_sc(adata, pre, post, obs_col, IDs, ID_names=None, figsiz
     sns.kdeplot(dist_norm_1_2, shade=False, bw=0.01, ax=g.ax_marg_x,  color='darkred', label=ID_names[1]+' - '+ID_names[2], legend=legend)
     if legend:
         g.ax_marg_x.legend(loc=(1.01,0.1))
+
     sns.kdeplot(post_norm_0_1, shade=False, bw=0.01, vertical=True,  color='darkorange', ax=g.ax_marg_y)
     sns.kdeplot(post_norm_0_2, shade=False, bw=0.01, vertical=True,  color='darkgreen', ax=g.ax_marg_y)
     sns.kdeplot(post_norm_1_2, shade=False, bw=0.01, vertical=True,  color='darkred', ax=g.ax_marg_y)
     g.ax_joint.plot(np.linspace(max(dist.min(),post.min()),1,100), np.linspace(max(dist.min(),post.min()),1,100), linestyle='dashed', color=sns.cubehelix_palette()[-1]) # plot identity line as reference for regression
-    plt.xlabel('Pre-Transformation', fontsize=14)
-    plt.ylabel('Post-Transformation', fontsize=14)
+    if ax_labels:
+        plt.xlabel(ax_labels[0], fontsize='xx-large', color=sns.cubehelix_palette()[-1])
+        plt.ylabel(ax_labels[1], fontsize='xx-large', color=sns.cubehelix_palette()[2])
+
     plt.tick_params(labelleft=False, labelbottom=False)
 
     return corr_stats, EMD
