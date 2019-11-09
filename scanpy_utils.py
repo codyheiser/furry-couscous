@@ -176,6 +176,7 @@ class DR_plot():
         '''
         dim_name = how to label axes ('dim 1' on x and 'dim 2' on y by default)
         figsize = size of resulting axes
+        ax_labels = draw arrows and dimension names in lower left corner of plot
         '''
         self.fig, self.ax = plt.subplots(1, figsize=figsize)
         self.cmap = plt.get_cmap('plasma')
