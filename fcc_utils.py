@@ -94,7 +94,7 @@ class DR_plot():
                  .plot_IDs(): plot one or more cluster IDs on top of an .obsm from an `AnnData` object
                  .plot_centroids(): plot cluster centroids defined using find_centroids() function on `AnnData` object
     '''
-    def __init__(self, dim_name='dim', figsize=(5,5)):
+    def __init__(self, dim_name='dim', figsize=(5,5), ax_labels=True):
         '''
         dim_name = how to label axes ('dim 1' on x and 'dim 2' on y by default)
         figsize = size of resulting axes
@@ -102,18 +102,19 @@ class DR_plot():
         self.fig, self.ax = plt.subplots(1, figsize=figsize)
         self.cmap = plt.get_cmap('plasma')
 
-        plt.xlabel('{} 1'.format(dim_name), fontsize=14)
-        self.ax.xaxis.set_label_coords(0.2, -0.025)
-        plt.ylabel('{} 2'.format(dim_name), fontsize=14)
-        self.ax.yaxis.set_label_coords(-0.025, 0.2)
+        if ax_labels:
+            plt.xlabel('{} 1'.format(dim_name), fontsize=14)
+            self.ax.xaxis.set_label_coords(0.2, -0.025)
+            plt.ylabel('{} 2'.format(dim_name), fontsize=14)
+            self.ax.yaxis.set_label_coords(-0.025, 0.2)
 
-        plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
-        plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+            plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(-0.006,0), xytext=(0.2,0), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
+            plt.annotate('', textcoords='axes fraction', xycoords='axes fraction', xy=(0,-0.006), xytext=(0,0.2), arrowprops=dict(arrowstyle= '<-', lw=2, color='black'))
 
         plt.tick_params(labelbottom=False, labelleft=False)
         sns.despine(left=True, bottom=True)
         plt.tight_layout()
-    
+
 
     def plot(self, data, color, pt_size=75, legend=None, save_to=None):
         '''
