@@ -275,7 +275,7 @@ def knn_preservation(pre, post):
     return np.round(100 - ((pre != post).sum()/(pre.shape[0]**2))*100, 4)
 
 
-def structure_preservation_sc(adata, latent, native='X', metric=None, k=30, downsample=False, verbose=True, force_recalc=False):
+def structure_preservation_sc(adata, latent, native='X', metric='euclidean', k=30, downsample=False, verbose=True, force_recalc=False):
     '''
     wrapper function for full structural preservation workflow applied to scanpy AnnData object
         adata = AnnData object with latent space to test in .obsm slot, and native (reference) space in .X or .obsm
