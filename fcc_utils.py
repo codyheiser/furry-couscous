@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 from ot import wasserstein_1d
-from scipy.spatial.distance import pdist
+from scipy.spatial.distance import pdist, cdist
 from scipy.stats import pearsonr
 
 import seaborn as sns; sns.set(style = 'white')
@@ -126,7 +126,7 @@ def knn_preservation(pre, post):
     return np.round(100 - ((pre != post).sum()/(pre.shape[0]**2))*100, 4)
 
 
-def structure_preservation_sc(adata, latent, native='X', metric=None, k=30, downsample=False, verbose=True, force_recalc=False):
+def structure_preservation_sc(adata, latent, native='X', metric='euclidean', k=30, downsample=False, verbose=True, force_recalc=False):
     '''
     wrapper function for full structural preservation workflow applied to scanpy AnnData object
         adata = AnnData object with latent space to test in .obsm slot, and native (reference) space in .X or .obsm
@@ -265,7 +265,7 @@ class SP_plot():
         plt.plot(pre_bin_edges[1:], pre_cdf/pre_cdf[-1], label=self.labels[0], color=self.palette[-1])
         plt.plot(post_bin_edges[1:], post_cdf/post_cdf[-1], label=self.labels[1], color=self.palette[2])
         if legend:
-            plt.legend(loc='best',fontsize='xx-large')
+            plt.legend(loc='lower right',fontsize='xx-large')
         else:
             plt.legend()
             self.ax.legend().remove()
