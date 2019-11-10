@@ -306,7 +306,7 @@ def structure_preservation_sc(adata, latent, native='X', metric='euclidean', k=3
         adata.uns['{}_distances'.format(latent)] = pdist(adata.obsm[latent], metric=metric)
     
     # 2) get correlation and EMD values, and return normalized distance vectors for plotting distributions
-    adata.uns['{}_norm_distances'.format(native)], adata.uns['{}_norm_distances'.format(latent)], corr_stats, EMD = distance_stats(pre=adata.uns['{}_distances'.format(native)], post=adata.uns['{}_distances'.format(latent)], verbose=verbose, downsample=downsample)
+    adata.uns['{}_norm_distances'.format(native)], adata.uns['{}_norm_distances'.format(latent)], corr_stats, EMD = distance_stats(pre=adata.uns['{}_distances'.format(native)].copy(), post=adata.uns['{}_distances'.format(latent)].copy(), verbose=verbose, downsample=downsample)
 
     # 3) determine neighbors
     if '{}_neighbors'.format(native) not in adata.uns.keys() or force_recalc: # check for existence in AnnData to prevent re-work
