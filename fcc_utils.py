@@ -63,16 +63,15 @@ def subset_uns_by_ID(adata, uns_keys, obs_col, IDs):
         adata.uns['{}_{}'.format(key, '_'.join([str(x) for x in IDs]))] = tmp # save new .uns key by appending IDs to original key name
 
 
-def find_centroids(adata, use_rep, obs_col='louvain', IDs='all'):
+def find_centroids(adata, use_rep, obs_col='louvain'):
     '''
     find cluster centroids
         adata = AnnData object
         use_rep = 'X' or adata.obsm key containing space to calculate centroids in (i.e. 'X_pca')
         obs_col = adata.obs column name containing cluster IDs
-        save_rep = adata.uns key
     '''
     # calculate centroids
-    clu_names = adata.obs[obs_col].unique()
+    clu_names = adata.obs[obs_col].unique().astype(str)
     if use_rep == 'X':
         adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.X[adata.obs[obs_col]==clu,:],axis=0) for clu in clu_names])
     else:
@@ -149,7 +148,7 @@ class DR_plot():
         '''
         plotter = adata.obsm[use_rep]
         # get color mapping from obs_col
-        clu_names = adata.obs[obs_col].unique()
+        clu_names = adata.obs[obs_col].unique().astype(str)
         colors = self.cmap(np.linspace(0, 1, len(clu_names)))
         cdict = dict(zip(clu_names, colors))
 
@@ -181,7 +180,7 @@ class DR_plot():
             save_to = path to .png file to save output, or None
         '''
         # get color mapping from obs_col
-        clu_names = adata.obs[obs_col].unique()
+        clu_names = adata.obs[obs_col].unique().astype(str)
         colors = self.cmap(np.linspace(0, 1, len(clu_names)))
         
         # draw points in embedding first
