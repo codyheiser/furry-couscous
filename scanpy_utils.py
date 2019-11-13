@@ -150,17 +150,18 @@ def find_centroids(adata, use_rep, obs_col='louvain'):
         adata = AnnData object
         use_rep = 'X' or adata.obsm key containing space to calculate centroids in (i.e. 'X_pca')
         obs_col = adata.obs column name containing cluster IDs
-        save_rep = adata.uns key
     '''
     # calculate centroids
+    clu_names = adata.obs[obs_col].unique().astype(str)
     if use_rep == 'X':
-        adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.X[adata.obs[obs_col]==clu,:],axis=0) for clu in sorted(adata.obs[obs_col].unique())])
+        adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.X[adata.obs[obs_col]==clu,:],axis=0) for clu in clu_names])
     else:
-        adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.obsm[use_rep][adata.obs[obs_col]==clu,:],axis=0) for clu in sorted(adata.obs[obs_col].unique())])
+        adata.uns['{}_centroids'.format(use_rep)] = np.array([np.mean(adata.obsm[use_rep][adata.obs[obs_col]==clu,:],axis=0) for clu in clu_names])
     # calculate distances between all centroids
     adata.uns['{}_centroid_distances'.format(use_rep)] = cdist(adata.uns['{}_centroids'.format(use_rep)], adata.uns['{}_centroids'.format(use_rep)])
     # build networkx minimum spanning tree between centroids
     G = nx.from_numpy_matrix(adata.uns['{}_centroid_distances'.format(use_rep)])
+    G = nx.relabel_nodes(G, mapping = dict(zip(list(G.nodes),clu_names)), copy = True)
     adata.uns['{}_centroid_MST'.format(use_rep)] = nx.minimum_spanning_tree(G)
 
 
@@ -227,7 +228,7 @@ class DR_plot():
         '''
         plotter = adata.obsm[use_rep]
         # get color mapping from obs_col
-        clu_names = adata.obs[obs_col].unique()
+        clu_names = adata.obs[obs_col].unique().astype(str)
         colors = self.cmap(np.linspace(0, 1, len(clu_names)))
         cdict = dict(zip(clu_names, colors))
 
@@ -259,7 +260,7 @@ class DR_plot():
             save_to = path to .png file to save output, or None
         '''
         # get color mapping from obs_col
-        clu_names = adata.obs[obs_col].unique()
+        clu_names = adata.obs[obs_col].unique().astype(str)
         colors = self.cmap(np.linspace(0, 1, len(clu_names)))
         
         # draw points in embedding first
