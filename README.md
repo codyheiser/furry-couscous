@@ -1,7 +1,7 @@
 ### A quantitative framework for evaluating data structure preservation by dimensionality reduction techniques
 High-dimensional data is integral to modern systems biology. Computational methods for dimensionality reduction are being rapidly developed for applications to single-cell and multi-modal technologies. In order to understand what these nonlinear transformations do to the underlying biological patterns in our data, we developed a framework of quantitative metrics for global and local distance preservation. See our [bioRxiv preprint](https://www.biorxiv.org/content/10.1101/684340v1) for details and analysis of existing dimensionality reduction methods.  
 
-![alt text](dev/outputs/figure_1.pdf)
+![alt text](dev/outputs/figure_1.png)
 **Figure 1.** Cell distance distributions describe global structure of high-dimensional datasets.  
 
 ---
