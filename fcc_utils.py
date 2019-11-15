@@ -16,6 +16,7 @@ from ot import wasserstein_1d
 from scipy.spatial.distance import cdist, pdist
 from scipy.stats import pearsonr
 from sklearn.neighbors import kneighbors_graph
+from sklearn.preprocessing import normalize
 
 import seaborn as sns
 
@@ -23,12 +24,16 @@ sns.set(style="white")
 
 
 # scanpy utility functions #
-def arcsinh(adata, layer=None, scale=1000):
+def arcsinh(adata, layer=None, norm="l1", scale=1000):
     """
     return arcsinh-normalized values for each element in anndata counts matrix
     l1 normalization (sc.pp.normalize_total) should be performed before this transformation
         adata = AnnData object
         layer = name of lauer to perform arcsinh-normalization on. if None, use AnnData.X
+        norm = normalization strategy prior to Log2 transform.
+            None: do not normalize data
+            'l1': divide each count by sum of counts for each cell
+            'l2': divide each count by sqrt of sum of squares of counts for cell
         scale = factor to scale normalized counts to; default 1000
     """
     if layer is None:
@@ -36,7 +41,7 @@ def arcsinh(adata, layer=None, scale=1000):
     else:
         mat = adata.layers[layer]
 
-    adata.layers["arcsinh_norm"] = np.arcsinh(mat * scale)
+    adata.layers["arcsinh_norm"] = np.arcsinh(normalize(mat, axis=1, norm=norm) * scale)
 
 
 def knn_graph(dist_matrix, k, adata, save_rep="knn"):
@@ -344,10 +349,27 @@ def distance_stats(pre, post, downsample=False, verbose=True):
     if pre.ndim == 2:
         if verbose:
             print(
-                "Flattening distance matrices into 1D array of unique cell-cell distances..."
+                "Flattening pre-transformation distance matrix into 1D array..."
             )
-        pre = pre.flatten()
-        post = post.flatten()
+        # if symmetric, only keep unique values (above diagonal)
+        if np.allclose(pre, pre.T, rtol=1e-05, atol=1e-08):
+            pre = pre[np.triu_indices(n=pre.shape[0], k=1)]
+        # otherwise, flatten all distances
+        else:
+            pre = pre.flatten()
+
+    # if distance matrix (mA x mB, result of cdist), flatten to unique cell-cell distances
+    if post.ndim == 2:
+        if verbose:
+            print(
+                "Flattening post-transformation distance matrix into 1D array..."
+            )
+        # if symmetric, only keep unique values (above diagonal)
+        if np.allclose(post, post.T, rtol=1e-05, atol=1e-08):
+            post = post[np.triu_indices(n=post.shape[0], k=1)]
+        # otherwise, flatten all distances
+        else:
+            post = post.flatten()
 
     # if dataset is large, randomly downsample to reasonable number of cells for calculation
     if downsample:

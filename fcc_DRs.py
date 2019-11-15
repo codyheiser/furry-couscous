@@ -199,10 +199,10 @@ class RNA_counts:
         """
         Perform an arcsinh-transformation on a np.ndarray containing raw data of shape=(n_cells,n_genes).
         Useful for feeding into PCA or tSNE.
-            norm = normalization strategy prior to Log2 transorm.
+            norm = normalization strategy prior to Log2 transform.
                 None: do not normalize data
                 'l1': divide each count by sum of counts for each cell
-                'l2': divide each count by sqrt of sum of squares of counts for cell.
+                'l2': divide each count by sqrt of sum of squares of counts for cell
             scale = factor to multiply values by before arcsinh-transform. scales values away from [0,1] in order to make arcsinh more effective.
             ranks = which barcodes to keep after normalization. Can be list of ranks of most abundant barcodes (integers, i.e. [1,2,3] for top 3 barcodes),
                 or names of barcode IDs (strings, i.e. ['0','1','2'] for barcodes with numbered IDs)
