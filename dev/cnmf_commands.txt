@@ -1,0 +1,9 @@
+python ../../cNMF/cnmf.py prepare --output-dir cNMF/ --name retina_cNMF -c ../inputs/GSM1626793_P14Retina_1.processed.h5ad -k 7 --n-iter 100 --total-workers 1 --seed 18 --numgenes 500 --beta-loss frobenius
+
+python ../../cNMF/cnmf.py factorize --output-dir cNMF/ --name retina_cNMF --worker-index 0
+
+python ../../cNMF/cnmf.py combine --output-dir cNMF/ --name retina_cNMF
+
+python ../../cNMF/cnmf.py k_selection_plot --output-dir cNMF/ --name retina_cNMF
+
+python ../../cNMF/cnmf.py consensus --output-dir cNMF/ --name retina_cNMF --local-density-threshold 2.00 --components 7 --show-clustering

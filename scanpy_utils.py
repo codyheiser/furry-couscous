@@ -312,7 +312,7 @@ class DR_plot:
                 plotter[:, 1],
                 s=pt_size,
                 alpha=0.7,
-                c=[cdict[x] for x in adata.obs[obs_col]],
+                c=[cdict[x] for x in adata.obs[obs_col].astype(str)],
                 edgecolor="none",
             )
 
@@ -334,7 +334,7 @@ class DR_plot:
                 alpha=0.7,
                 c=[
                     cdict[x]
-                    for x in adata.obs.loc[adata.obs[obs_col].isin(IDs), obs_col]
+                    for x in adata.obs.loc[adata.obs[obs_col].isin(IDs), obs_col].astype(str)
                 ],
                 edgecolor="none",
             )
@@ -364,8 +364,9 @@ class DR_plot:
             pt_size = size of points in plot
             draw_edges = draw edges of minimum spanning tree between all centroids?
             highlight_edges = list of edge IDs as tuples to highlight in red on plot
-                              e.g. set(adata.uns['X_tsne_centroid_MST'].edges).difference(set(adata.uns['X_umap_centroid_MST'].edges)) => {(0,3), (0,7)}
-                              says that edges from centroid 0 to 3 and 0 to 7 are found in 'X_tsne_centroids' but not in 'X_umap_centroids'. highlight the edges to show this.
+                e.g. `set(adata.uns['X_tsne_centroid_MST'].edges).difference(set(adata.uns['X_umap_centroid_MST'].edges))`
+                with output {(0,3), (0,7)} says that edges from centroid 0 to 3 and 0 to 7 are found in 'X_tsne_centroids'
+                but not in 'X_umap_centroids'. highlight the edges to show this.
             save_to = path to .png file to save output, or None
         """
         # get color mapping from obs_col
