@@ -213,7 +213,7 @@ class DR_plot:
                 plotter[:, 1],
                 s=pt_size,
                 alpha=0.7,
-                c=[cdict[x] for x in adata.obs[obs_col]],
+                c=[cdict[x] for x in adata.obs[obs_col].astype(str)],
                 edgecolor="none",
             )
 
@@ -235,7 +235,7 @@ class DR_plot:
                 alpha=0.7,
                 c=[
                     cdict[x]
-                    for x in adata.obs.loc[adata.obs[obs_col].isin(IDs), obs_col]
+                    for x in adata.obs.loc[adata.obs[obs_col].isin(IDs), obs_col].astype(str)
                 ],
                 edgecolor="none",
             )
