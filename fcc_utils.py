@@ -38,7 +38,7 @@ def threshold(mat, thresh=0.5, dir="above"):
     return a
 
 
-def bin_threshold(mat, threshmin=None, threshmax=0.5):
+def bin_threshold(mat, threshmin=False, threshmax=0.5):
     """
     generate binary segmentation from probabilities
         thresmax = value on [0,1] to assign binary IDs from probabilities. values higher than threshmax -> 1.
@@ -46,10 +46,10 @@ def bin_threshold(mat, threshmin=None, threshmax=0.5):
     """
     a = np.ma.array(mat, copy=True)
     mask = np.zeros(a.shape, dtype=bool)
-    if threshmin is not None:
+    if threshmin:
         mask |= (a < threshmin).filled(False)
 
-    if threshmax is not None:
+    if threshmax:
         mask |= (a > threshmax).filled(False)
 
     a[mask] = 1
