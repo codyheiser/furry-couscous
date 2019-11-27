@@ -191,14 +191,17 @@ def find_centroids(adata, use_rep, obs_col="louvain"):
     if use_rep == "X":
         adata.uns["{}_centroids".format(use_rep)] = np.array(
             [
-                np.mean(adata.X[adata.obs[obs_col] == clu, :], axis=0)
+                np.mean(adata.X[adata.obs[obs_col].astype(str) == clu, :], axis=0)
                 for clu in clu_names
             ]
         )
     else:
         adata.uns["{}_centroids".format(use_rep)] = np.array(
             [
-                np.mean(adata.obsm[use_rep][adata.obs[obs_col] == clu, :], axis=0)
+                np.mean(
+                    adata.obsm[use_rep][adata.obs[obs_col].astype(str) == clu, :],
+                    axis=0,
+                )
                 for clu in clu_names
             ]
         )

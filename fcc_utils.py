@@ -158,7 +158,11 @@ def knn_preservation(pre, post):
     ), 'Matrices contain different number of cells.\n{} in "pre"\n{} in "post"\n'.format(
         pre.shape[0], post.shape[0]
     )
-    return np.round(100 - ((pre != post).sum() / (pre.shape[0] ** 2)) * 100, 4)
+    return np.round(
+        (np.isclose(pre, post, rtol=1e-05, atol=1e-08).sum() / (pre.shape[0] ** 2))
+        * 100,
+        4,
+    )
 
 
 def structure_preservation_sc(
@@ -175,11 +179,13 @@ def structure_preservation_sc(
     wrapper function for full structural preservation workflow applied to scanpy AnnData object
         adata = AnnData object with latent space to test in .obsm slot, and native (reference) space in .X or .obsm
         latent = adata.obsm key that contains low-dimensional latent space for testing
-        native = adata.obsm key or .X containing high-dimensional native space, which should be direct input to dimension reduction
-                 that generated latent .obsm for fair comparison. Default 'X', which uses adata.X.
-        metric = distance metric to use. one of ['chebyshev','cityblock','euclidean','minkowski','mahalanobis','seuclidean']. default 'euclidean'.
+        native = adata.obsm key or .X containing high-dimensional native space, which should be direct input to dimension
+            reduction that generated latent .obsm for fair comparison. Default 'X', which uses adata.X.
+        metric = distance metric to use. one of ['chebyshev','cityblock','euclidean','minkowski','mahalanobis','seuclidean'].
+            default 'euclidean'.
         k = number of nearest neighbors to test preservation
-        downsample = number of distances to downsample to (maximum of 50M [~10k cells, if symmetrical] is recommended for performance)
+        downsample = number of distances to downsample to
+            (maximum of 50M [~10k cells, if symmetrical] is recommended for performance)
         verbose = print progress statements
         force_recalc = if True, recalculate all distances and neighbor graphs, regardless of their presence in AnnData object
     """
@@ -195,15 +201,17 @@ def structure_preservation_sc(
     ):  # check for existence in AnnData to prevent re-work
         if verbose:
             print("Calculating unique distances for native space, {}".format(native))
-        adata.uns["{}_distances".format(native)] = pdist(native_space, metric=metric)
+        adata.uns["{}_distances".format(native)] = cdist(
+            native_space, native_space, metric=metric
+        )
 
     if (
         "{}_distances".format(latent) not in adata.uns.keys() or force_recalc
     ):  # check for existence in AnnData to prevent re-work
         if verbose:
             print("Calculating unique distances for latent space, {}".format(latent))
-        adata.uns["{}_distances".format(latent)] = pdist(
-            adata.obsm[latent], metric=metric
+        adata.uns["{}_distances".format(latent)] = cdist(
+            adata.obsm[latent], adata.obsm[latent], metric=metric
         )
 
     # 2) get correlation and EMD values, and return normalized distance vectors for plotting distributions
@@ -227,14 +235,12 @@ def structure_preservation_sc(
             print(
                 "{}-nearest neighbor calculation for native space, {}".format(k, native)
             )
-        adata.uns["{}_neighbors".format(native)] = sc.pp.neighbors(
-            adata,
-            n_neighbors=k,
-            use_rep=native,
-            knn=True,
-            metric="euclidean",
-            copy=True,
-        ).uns["neighbors"]
+        knn_graph(
+            adata.uns["{}_distances".format(native)],
+            k=k,
+            adata=adata,
+            save_rep="{}_knn".format(native),
+        )
 
     if (
         "{}_neighbors".format(latent) not in adata.uns.keys() or force_recalc
@@ -243,33 +249,31 @@ def structure_preservation_sc(
             print(
                 "{}-nearest neighbor calculation for latent space, {}".format(k, latent)
             )
-        adata.uns["{}_neighbors".format(latent)] = sc.pp.neighbors(
-            adata,
-            n_neighbors=k,
-            use_rep=latent,
-            knn=True,
-            metric="euclidean",
-            copy=True,
-        ).uns["neighbors"]
+        knn_graph(
+            adata.uns["{}_distances".format(latent)],
+            k=k,
+            adata=adata,
+            save_rep="{}_knn".format(latent),
+        )
 
     # 4) calculate neighbor preservation
     if verbose:
         print("Determining nearest neighbor preservation")
     if (
-        adata.uns["{}_neighbors".format(native)]["params"]["n_neighbors"]
-        != adata.uns["{}_neighbors".format(latent)]["params"]["n_neighbors"]
+        adata.uns["{}_knn".format(native)]["k"]
+        != adata.uns["{}_knn".format(latent)]["k"]
     ):
         warnings.warn(
             'Warning: Nearest-neighbor graphs constructed with different k values. k={} in "{}_neighbors", while k={} in "{}_neighbors". Consider re-generating neighbors graphs by setting force_recalc=True.'.format(
-                adata.uns["{}_neighbors".format(native)]["params"]["n_neighbors"],
+                adata.uns["{}_knn".format(native)]["k"],
                 native,
-                adata.uns["{}_neighbors".format(latent)]["params"]["n_neighbors"],
+                adata.uns["{}_knn".format(latent)]["k"],
                 latent,
             )
         )
     knn_pres = knn_preservation(
-        pre=adata.uns["{}_neighbors".format(native)]["distances"],
-        post=adata.uns["{}_neighbors".format(latent)]["distances"],
+        pre=adata.uns["{}_knn".format(native)]["graph"],
+        post=adata.uns["{}_knn".format(latent)]["graph"],
     )
 
     if verbose:
@@ -455,7 +459,7 @@ def cluster_arrangement_sc(
     obs_col,
     IDs,
     ID_names=None,
-    figsize=(6, 6),
+    figsize=(4, 4),
     legend=True,
     ax_labels=["Native", "Latent"],
 ):
