@@ -16,6 +16,7 @@ from sklearn.preprocessing import normalize
 
 # plotting packages
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 import seaborn as sns
 
 sns.set(style="white")
@@ -214,6 +215,62 @@ def find_centroids(adata, use_rep, obs_col="louvain"):
     G = nx.from_numpy_matrix(adata.uns["{}_centroid_distances".format(use_rep)])
     G = nx.relabel_nodes(G, mapping=dict(zip(list(G.nodes), clu_names)), copy=True)
     adata.uns["{}_centroid_MST".format(use_rep)] = nx.minimum_spanning_tree(G)
+
+
+def rank_genes(adata, attr='varm', keys='usages', indices=None, labels=None, color='black', n_points=20, log=False, show=None, figsize=(7,7)):
+    """
+    Plot rankings. [Adapted from scanpy.plotting._anndata.ranking]
+    See, for example, how this is used in pl.pca_ranking.
+    Parameters
+    ----------
+    adata : AnnData
+        The data.
+    attr : {'var', 'obs', 'uns', 'varm', 'obsm'}
+        The attribute of AnnData that contains the score.
+    keys : str or list of str
+        The scores to look up an array from the attribute of adata.
+    indices : list of int
+        The column indices of keys for which to plot (e.g. [0,1,2] for first three keys)
+    Returns
+    -------
+    Returns matplotlib gridspec with access to the axes.
+    """
+    # default to all usages
+    if indices is None:
+        indices = range(getattr(adata, attr)[keys].shape[1])
+    # get scores for each usage
+    if isinstance(keys, str) and indices is not None:
+        scores = getattr(adata, attr)[keys][:, indices]
+        keys = ['{}{}'.format(keys[:-1], i+1) for i in indices]
+    n_panels = len(keys) if isinstance(keys, list) else 1
+    if n_panels == 1: scores, keys = scores[:, None], [keys]
+    if log: scores = np.log(scores)
+    if labels is None:
+        labels = adata.var_names if attr in {'var', 'varm'} else np.arange(scores.shape[0]).astype(str)
+    if isinstance(labels, str):
+        labels = [labels + str(i+1) for i in range(scores.shape[0])]
+    if n_panels <= 5: n_rows, n_cols = 1, n_panels
+    else: n_rows, n_cols = 2, int(n_panels/2 + 0.5)
+    plt.figure(figsize=(n_cols * figsize[0],n_rows * figsize[1]))
+    left, bottom = 0.2/n_cols, 0.13/n_rows
+    gs = gridspec.GridSpec(nrows=n_rows, ncols=n_cols, wspace=0.2,
+                           left=left, bottom=bottom,
+                           right=1-(n_cols-1)*left-0.01/n_cols,
+                           top=1-(n_rows-1)*bottom-0.1/n_rows)
+    for iscore, score in enumerate(scores.T):
+        plt.subplot(gs[iscore])
+        indices = np.argsort(score)[::-1][:n_points+1]
+        for ig, g in enumerate(indices):
+            plt.text(ig, score[g], labels[g], color=color,
+                    rotation='vertical', verticalalignment='bottom',
+                    horizontalalignment='center', fontsize='large')
+        plt.title(keys[iscore].replace('_', ' '), fontsize='x-large')
+        plt.xlim(-0.9, ig + 0.9)
+        score_min, score_max = np.min(score[indices]), np.max(score[indices])
+        plt.ylim((0.95 if score_min > 0 else 1.05) * score_min,
+                (1.05 if score_max > 0 else 0.95) * score_max)
+        plt.tick_params(labelsize='x-large')
+    if show == False: return gs
 
 
 class DR_plot:
