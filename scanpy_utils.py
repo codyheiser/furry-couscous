@@ -3,7 +3,7 @@
 scanpy utility functions
 
 @author: C Heiser
-October 2019
+2019
 """
 # basics
 import numpy as np
@@ -35,9 +35,8 @@ def reorder_adata(adata, descending=True):
 def arcsinh(adata, layer=None, norm="l1", scale=1000):
     """
     return arcsinh-normalized values for each element in anndata counts matrix
-    l1 normalization (sc.pp.normalize_total) should be performed before this transformation
         adata = AnnData object
-        layer = name of lauer to perform arcsinh-normalization on. if None, use AnnData.X
+        layer = name of layer to perform arcsinh-normalization on. if None, use AnnData.X
         norm = normalization strategy prior to Log2 transform.
             None: do not normalize data
             'l1': divide each count by sum of counts for each cell
@@ -72,7 +71,7 @@ def gf_icf(adata, layer=None):
 
     idf = np.log(adata.n_obs / (ni + 1))
 
-    adata.layers["{}_gf-icf".format(layer)] = tf * idf
+    adata.layers["gf-icf"] = tf * idf
 
 
 def knn_graph(dist_matrix, k, adata, save_rep="knn"):
@@ -83,9 +82,12 @@ def knn_graph(dist_matrix, k, adata, save_rep="knn"):
         adata = AnnData object to add resulting graph to (in .uns slot)
         save_rep = name of .uns key to save knn graph to within adata (default adata.uns['knn'])
     """
-    adata.uns[save_rep] = kneighbors_graph(
-        dist_matrix, k, mode="connectivity", include_self=False
-    ).toarray()
+    adata.uns[save_rep] = {
+        "graph": kneighbors_graph(
+            dist_matrix, k, mode="connectivity", include_self=False, n_jobs=-1
+        ).toarray(),
+        "k": k,
+    }
 
 
 def subset_uns_by_ID(adata, uns_keys, obs_col, IDs):
@@ -115,17 +117,18 @@ def recipe_fcc(adata, mito_names="MT-"):
         adata = AnnData object with raw counts data in .X 
         mito_names = substring encompassing mitochondrial gene names for calculation of mito expression
 
-    -calculates useful .obs and .var columns ('total_counts', 'pct_counts_mito', 'n_genes_by_counts', etc.)
-    -orders cells by total counts
-    -stores raw counts (adata.raw.X)
-    -provides GF-ICF normalization (adata.layers['X_gf-icf'])
-    -normalization and log1p transformation of counts (adata.X)
-    -identifies highly-variable genes using seurat method (adata.var['highly_variable'])
+    - calculates useful .obs and .var columns ('total_counts', 'pct_counts_mito', 'n_genes_by_counts', etc.)
+    - orders cells by total counts
+    - store raw counts (adata.layers['raw_counts'])
+    - GF-ICF normalization (adata.layers['X_gf-icf'])
+    - normalization and arcsinh transformation of counts (adata.layers['arcsinh_norm'])
+    - normalization and log1p transformation of counts (adata.X, adata.layers['log1p_norm'])
+    - identify highly-variable genes using seurat method (adata.var['highly_variable'])
     """
     reorder_adata(adata, descending=True)  # reorder cells by total counts descending
 
     # raw
-    adata.raw = adata  # store raw counts before manipulation
+    adata.layers["raw_counts"] = adata.X.copy()  # store raw counts before manipulation
 
     # obs/var
     adata.var["mito"] = adata.var_names.str.contains(
@@ -138,46 +141,21 @@ def recipe_fcc(adata, mito_names="MT-"):
         adata.obs["total_counts"]
     )  # rank cells by total counts
 
-    # gf-icf
-    gf_icf(adata, layer=None)  # add gf-icf scores to adata.layers['gf-icf']
+    # arcsinh transform (adata.layers["arcsinh_norm"])
+    arcsinh(adata, norm="l1", scale=1000)
 
-    # normalize/transform
+    # gf-icf transform (adata.layers["gf-icf"])
+    gf_icf(adata, layer=None)
+
+    # log1p transform (adata.layers["log1p_norm"])
     sc.pp.normalize_total(
         adata, target_sum=10000, layers=None, layer_norm=None, key_added="norm_factor"
     )
-    sc.pp.log1p(adata)  # log1p transform counts
+    sc.pp.log1p(adata)
+    adata.layers["log1p_norm"] = adata.X.copy()  # save to .layers
 
     # HVGs
     sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=2000)
-
-
-def gf_icf_markers(adata, n_genes=5, group_by="louvain"):
-    """
-    return n_genes with top gf-icf scores for each group
-        adata = AnnData object preprocessed using gf_icf() or recipe_fcc() function
-        n_genes = number of top gf-icf scored genes to return per group
-        group_by = how to group cells to ID marker genes
-    """
-    markers = pd.DataFrame()
-    for clu in adata.obs[group_by].unique():
-        gf_icf_sum = adata.layers["gf-icf"][adata.obs[group_by] == str(clu)].sum(axis=0)
-        gf_icf_mean = adata.layers["gf-icf"][adata.obs[group_by] == str(clu)].mean(
-            axis=0
-        )
-        top = np.argpartition(gf_icf_sum, -n_genes)[-n_genes:]
-        gene_IDs = adata.var.index[top]
-        markers = markers.append(
-            pd.DataFrame(
-                {
-                    group_by: np.repeat(clu, n_genes),
-                    "gene": gene_IDs,
-                    "gf-icf_sum": gf_icf_sum[top],
-                    "gf-icf_mean": gf_icf_mean[top],
-                }
-            )
-        )
-
-    return markers
 
 
 def find_centroids(adata, use_rep, obs_col="louvain"):
@@ -217,7 +195,76 @@ def find_centroids(adata, use_rep, obs_col="louvain"):
     adata.uns["{}_centroid_MST".format(use_rep)] = nx.minimum_spanning_tree(G)
 
 
-def rank_genes(adata, attr='varm', keys='usages', indices=None, labels=None, color='black', n_points=20, log=False, show=None, figsize=(7,7)):
+def gf_icf_markers(adata, n_genes=5, group_by="louvain"):
+    """
+    return n_genes with top gf-icf scores for each group
+        adata = AnnData object preprocessed using gf_icf() or recipe_fcc() function
+        n_genes = number of top gf-icf scored genes to return per group
+        group_by = how to group cells to ID marker genes
+    """
+    markers = pd.DataFrame()
+    for clu in adata.obs[group_by].unique():
+        gf_icf_sum = adata.layers["gf-icf"][adata.obs[group_by] == str(clu)].sum(axis=0)
+        gf_icf_mean = adata.layers["gf-icf"][adata.obs[group_by] == str(clu)].mean(
+            axis=0
+        )
+        top = np.argpartition(gf_icf_sum, -n_genes)[-n_genes:]
+        gene_IDs = adata.var.index[top]
+        markers = markers.append(
+            pd.DataFrame(
+                {
+                    group_by: np.repeat(clu, n_genes),
+                    "gene": gene_IDs,
+                    "gf-icf_sum": gf_icf_sum[top],
+                    "gf-icf_mean": gf_icf_mean[top],
+                }
+            )
+        )
+
+    return markers
+
+
+def cnmf_markers(adata, spectra_score_file, n_genes=30, key="cnmf"):
+    """
+    read in gene spectra score output from cNMF and save top gene loadings 
+    for each usage as dataframe in adata.uns
+        adata = AnnData object
+        spectra_score_file = '<name>.gene_spectra_score.<k>.<dt>.txt' file from cNMF containing usage gene loadings
+        n_genes = number of top genes to list for each usage (rows of df)
+        key = prefix of adata.uns keys to save
+    """
+    # load Z-scored GEPs which reflect gene enrichment, save to adata.uns
+    adata.uns["{}_spectra".format(key)] = pd.read_csv(
+        spectra_score_file, sep="\t", index_col=0
+    ).T
+    # obtain top n_genes for each GEP in sorted order and combine them into df
+    top_genes = []
+    for gep in adata.uns["{}_spectra".format(key)].columns:
+        top_genes.append(
+            list(
+                adata.uns["{}_spectra".format(key)]
+                .sort_values(by=gep, ascending=False)
+                .index[:n_genes]
+            )
+        )
+    # save output to adata.uns
+    adata.uns["{}_markers".format(key)] = pd.DataFrame(
+        top_genes, index=adata.uns["{}_spectra".format(key)].columns
+    ).T
+
+
+def rank_genes(
+    adata,
+    attr="varm",
+    keys="usages",
+    indices=None,
+    labels=None,
+    color="black",
+    n_points=20,
+    log=False,
+    show=None,
+    figsize=(7, 7),
+):
     """
     Plot rankings. [Adapted from scanpy.plotting._anndata.ranking]
     See, for example, how this is used in pl.pca_ranking.
@@ -240,37 +287,118 @@ def rank_genes(adata, attr='varm', keys='usages', indices=None, labels=None, col
         indices = range(getattr(adata, attr)[keys].shape[1])
     # get scores for each usage
     if isinstance(keys, str) and indices is not None:
-        scores = getattr(adata, attr)[keys][:, indices]
-        keys = ['{}{}'.format(keys[:-1], i+1) for i in indices]
+        scores = np.array(getattr(adata, attr)[keys])[:, indices]
+        keys = ["{}{}".format(keys[:-1], i + 1) for i in indices]
     n_panels = len(keys) if isinstance(keys, list) else 1
-    if n_panels == 1: scores, keys = scores[:, None], [keys]
-    if log: scores = np.log(scores)
+    if n_panels == 1:
+        scores, keys = scores[:, None], [keys]
+    if log:
+        scores = np.log(scores)
     if labels is None:
-        labels = adata.var_names if attr in {'var', 'varm'} else np.arange(scores.shape[0]).astype(str)
+        labels = (
+            adata.var_names
+            if attr in {"var", "varm"}
+            else np.arange(scores.shape[0]).astype(str)
+        )
     if isinstance(labels, str):
-        labels = [labels + str(i+1) for i in range(scores.shape[0])]
-    if n_panels <= 5: n_rows, n_cols = 1, n_panels
-    else: n_rows, n_cols = 2, int(n_panels/2 + 0.5)
-    plt.figure(figsize=(n_cols * figsize[0],n_rows * figsize[1]))
-    left, bottom = 0.2/n_cols, 0.13/n_rows
-    gs = gridspec.GridSpec(nrows=n_rows, ncols=n_cols, wspace=0.2,
-                           left=left, bottom=bottom,
-                           right=1-(n_cols-1)*left-0.01/n_cols,
-                           top=1-(n_rows-1)*bottom-0.1/n_rows)
+        labels = [labels + str(i + 1) for i in range(scores.shape[0])]
+    if n_panels <= 5:
+        n_rows, n_cols = 1, n_panels
+    else:
+        n_rows, n_cols = 2, int(n_panels / 2 + 0.5)
+    plt.figure(figsize=(n_cols * figsize[0], n_rows * figsize[1]))
+    left, bottom = 0.2 / n_cols, 0.13 / n_rows
+    gs = gridspec.GridSpec(
+        nrows=n_rows,
+        ncols=n_cols,
+        wspace=0.2,
+        left=left,
+        bottom=bottom,
+        right=1 - (n_cols - 1) * left - 0.01 / n_cols,
+        top=1 - (n_rows - 1) * bottom - 0.1 / n_rows,
+    )
     for iscore, score in enumerate(scores.T):
         plt.subplot(gs[iscore])
-        indices = np.argsort(score)[::-1][:n_points+1]
+        indices = np.argsort(score)[::-1][: n_points + 1]
         for ig, g in enumerate(indices):
-            plt.text(ig, score[g], labels[g], color=color,
-                    rotation='vertical', verticalalignment='bottom',
-                    horizontalalignment='center', fontsize='large')
-        plt.title(keys[iscore].replace('_', ' '), fontsize='x-large')
+            plt.text(
+                ig,
+                score[g],
+                labels[g],
+                color=color,
+                rotation="vertical",
+                verticalalignment="bottom",
+                horizontalalignment="center",
+                fontsize="large",
+            )
+        plt.title(keys[iscore].replace("_", " "), fontsize="x-large")
         plt.xlim(-0.9, ig + 0.9)
         score_min, score_max = np.min(score[indices]), np.max(score[indices])
-        plt.ylim((0.95 if score_min > 0 else 1.05) * score_min,
-                (1.05 if score_max > 0 else 0.95) * score_max)
-        plt.tick_params(labelsize='x-large')
-    if show == False: return gs
+        plt.ylim(
+            (0.95 if score_min > 0 else 1.05) * score_min,
+            (1.05 if score_max > 0 else 0.95) * score_max,
+        )
+        plt.tick_params(labelsize="x-large")
+    if show == False:
+        return gs
+
+
+def cnmf_load_results(adata, cnmf_dir, name, k, dt, key="cnmf", n_points=15, **kwargs):
+    """
+    given adata object and corresponding cNMF output (cnmf_dir, name, k, dt to identify),
+    read in relevant results and save to adata object, and output plot of gene loadings
+    for each GEP usage.
+        adata = AnnData object
+        cnmf_dir = relative path to directory containing cNMF outputs
+        name = name of cNMF replicate
+        k = value used for consensus factorization
+        dt = distance threshold value used for consensus clustering
+        key = prefix of adata.uns keys to save
+        n_points = how many top genes to include in rank_genes() plot
+        **kwargs = keyword args to pass to cnmf_markers()
+    """
+    # read in cell usages
+    usage = pd.read_csv(
+        "{}/{}/{}.usages.k_{}.dt_{}.consensus.txt".format(
+            cnmf_dir, name, name, str(k), str(dt).replace(".", "_")
+        ),
+        sep="\t",
+        index_col=0,
+    )
+    usage.columns = ["usage_" + str(col) for col in usage.columns]
+    usage_norm = usage.div(usage.sum(axis=1), axis=0)
+    usage_norm.index = usage_norm.index.astype(str)
+    adata.obs = pd.merge(
+        left=adata.obs, right=usage_norm, how="left", left_index=True, right_index=True
+    )
+
+    # read in overdispersed genes determined by cNMF and add as metadata to adata.var
+    overdispersed = np.genfromtxt(
+        "{}/{}/{}.overdispersed_genes.txt".format(cnmf_dir, name, name), dtype=str
+    )
+    adata.var["cnmf_overdispersed"] = 0
+    adata.var.loc[
+        [x for x in adata.var.index if x in overdispersed], "cnmf_overdispersed"
+    ] = 1
+
+    # read top gene loadings for each GEP usage and save to adata.uns['cnmf_markers']
+    cnmf_markers(
+        adata,
+        "{}/{}/{}.gene_spectra_score.k_{}.dt_{}.txt".format(
+            cnmf_dir, name, name, str(k), str(dt).replace(".", "_")
+        ),
+        key=key,
+        **kwargs
+    )
+
+    # plot gene loadings from consensus file above
+    rank_genes(
+        adata,
+        attr="uns",
+        keys="{}_spectra".format(key),
+        labels=adata.uns["{}_spectra".format(key)].index,
+        n_points=n_points,
+    )
 
 
 class DR_plot:
@@ -394,7 +522,9 @@ class DR_plot:
                 alpha=0.7,
                 c=[
                     cdict[x]
-                    for x in adata.obs.loc[adata.obs[obs_col].isin(IDs), obs_col].astype(str)
+                    for x in adata.obs.loc[
+                        adata.obs[obs_col].isin(IDs), obs_col
+                    ].astype(str)
                 ],
                 edgecolor="none",
             )

@@ -1,6 +1,6 @@
 # Seurat utility functions
 # @author: C Heiser
-# November 2019
+# 2019
 
 require(tidyverse)
 require(Seurat)

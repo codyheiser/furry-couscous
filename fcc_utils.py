@@ -3,7 +3,7 @@
 utility functions
 
 @author: C Heiser
-October 2019
+2019
 """
 import warnings
 
@@ -16,6 +16,8 @@ from scipy.spatial.distance import pdist, cdist
 from scipy.stats import pearsonr
 
 import seaborn as sns
+
+from scanpy_utils import knn_graph
 
 sns.set(style="white")
 
@@ -82,9 +84,7 @@ def distance_stats(pre, post, downsample=False, verbose=True):
     # if distance matrix (mA x mB, result of cdist), flatten to unique cell-cell distances
     if pre.ndim == 2:
         if verbose:
-            print(
-                "Flattening pre-transformation distance matrix into 1D array..."
-            )
+            print("Flattening pre-transformation distance matrix into 1D array...")
         # if symmetric, only keep unique values (above diagonal)
         if np.allclose(pre, pre.T, rtol=1e-05, atol=1e-08):
             pre = pre[np.triu_indices(n=pre.shape[0], k=1)]
@@ -95,9 +95,7 @@ def distance_stats(pre, post, downsample=False, verbose=True):
     # if distance matrix (mA x mB, result of cdist), flatten to unique cell-cell distances
     if post.ndim == 2:
         if verbose:
-            print(
-                "Flattening post-transformation distance matrix into 1D array..."
-            )
+            print("Flattening post-transformation distance matrix into 1D array...")
         # if symmetric, only keep unique values (above diagonal)
         if np.allclose(post, post.T, rtol=1e-05, atol=1e-08):
             post = post[np.triu_indices(n=post.shape[0], k=1)]
