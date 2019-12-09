@@ -111,11 +111,16 @@ def subset_uns_by_ID(adata, uns_keys, obs_col, IDs):
         ] = tmp  # save new .uns key by appending IDs to original key name
 
 
-def recipe_fcc(adata, mito_names="MT-"):
+def recipe_fcc(
+    adata, mito_names="MT-", scale_arcsinh=1000, target_sum=1e6, n_hvgs=2000
+):
     """
     scanpy preprocessing recipe
         adata = AnnData object with raw counts data in .X 
         mito_names = substring encompassing mitochondrial gene names for calculation of mito expression
+        scale_arcsinh = multiplier following l1 normalization of counts prior to arcsinh transformation
+        target_sum = total sum of counts for each cell following sc.pp.normalize_total(). default 1e6 for TPM.
+        n_hvgs = number of highly variable genes to detect via seurat method
 
     - calculates useful .obs and .var columns ('total_counts', 'pct_counts_mito', 'n_genes_by_counts', etc.)
     - orders cells by total counts
@@ -142,20 +147,24 @@ def recipe_fcc(adata, mito_names="MT-"):
     )  # rank cells by total counts
 
     # arcsinh transform (adata.layers["arcsinh_norm"])
-    arcsinh(adata, norm="l1", scale=1000)
+    arcsinh(adata, norm="l1", scale=scale_arcsinh)
 
     # gf-icf transform (adata.layers["gf-icf"])
     gf_icf(adata, layer=None)
 
     # log1p transform (adata.layers["log1p_norm"])
     sc.pp.normalize_total(
-        adata, target_sum=10000, layers=None, layer_norm=None, key_added="norm_factor"
+        adata,
+        target_sum=target_sum,
+        layers=None,
+        layer_norm=None,
+        key_added="norm_factor",
     )
     sc.pp.log1p(adata)
     adata.layers["log1p_norm"] = adata.X.copy()  # save to .layers
 
     # HVGs
-    sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=2000)
+    sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=n_hvgs)
 
 
 def find_centroids(adata, use_rep, obs_col="louvain"):
