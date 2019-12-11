@@ -23,7 +23,16 @@ sns.set(style="white")
 
 
 def reorder_adata(adata, descending=True):
-    """place cells in descending order of total counts"""
+    """
+    place cells in descending order of total counts
+    
+    Parameters:
+        adata (AnnData.AnnData): AnnData object
+        descending (bool): highest counts first
+
+    Returns:
+        AnnData.AnnData: adata cells are reordered in place
+    """
     if descending:
         new_order = np.argsort(adata.X.sum(axis=1))[::-1]
     elif not descending:
@@ -35,13 +44,18 @@ def reorder_adata(adata, descending=True):
 def arcsinh(adata, layer=None, norm="l1", scale=1000):
     """
     return arcsinh-normalized values for each element in anndata counts matrix
-        adata = AnnData object
-        layer = name of layer to perform arcsinh-normalization on. if None, use AnnData.X
-        norm = normalization strategy prior to Log2 transform.
+
+    Parameters:
+        adata (AnnData.AnnData): AnnData object
+        layer (str or None): name of layer to perform arcsinh-normalization on. if None, use AnnData.X
+        norm (str or None): normalization strategy prior to Log2 transform.
             None: do not normalize data
             'l1': divide each count by sum of counts for each cell
             'l2': divide each count by sqrt of sum of squares of counts for cell
-        scale = factor to scale normalized counts to; default 1000
+        scale (int): factor to scale normalized counts to; default 1000
+
+    Returns:
+        AnnData.AnnData: adata is edited in place to add arcsinh normalization to .layers
     """
     if layer is None:
         mat = adata.X
@@ -54,15 +68,18 @@ def arcsinh(adata, layer=None, norm="l1", scale=1000):
 def gf_icf(adata, layer=None):
     """
     return GF-ICF scores for each element in anndata counts matrix
-        adata = AnnData object
-        layer = name of layer to perform GF-ICF normalization on. if None, use AnnData.X
+
+    Parameters:
+        adata (AnnData.AnnData): AnnData object
+        layer (str or None): name of layer to perform GF-ICF normalization on. if None, use AnnData.X
+
+    Returns:
+        AnnData.AnnData: adata is edited in place to add GF-ICF normalization to .layers
     """
     if layer is None:
         tf = adata.X.T / adata.X.sum(axis=1)
         tf = tf.T
         ni = adata.X.astype(bool).sum(axis=0)
-
-        layer = "X"  # set input layer for naming output layer
 
     else:
         tf = adata.layers[layer].T / adata.layers[layer].sum(axis=1)
@@ -77,10 +94,15 @@ def gf_icf(adata, layer=None):
 def knn_graph(dist_matrix, k, adata, save_rep="knn"):
     """
     build simple binary k-nearest neighbor graph and add to anndata object
-        dist_matrix = distance matrix to calculate knn graph for (i.e. pdist(adata.obsm['X_pca']))
-        k = number of nearest neighbors to determine
-        adata = AnnData object to add resulting graph to (in .uns slot)
-        save_rep = name of .uns key to save knn graph to within adata (default adata.uns['knn'])
+
+    Parameters:
+        dist_matrix (np.array): distance matrix to calculate knn graph for (i.e. pdist(adata.obsm['X_pca']))
+        k (int): number of nearest neighbors to determine
+        adata (AnnData.AnnData): AnnData object to add resulting graph to (in .uns slot)
+        save_rep (str): name of .uns key to save knn graph to within adata (default adata.uns['knn'])
+
+    Returns:
+        AnnData.AnnData: adata is edited in place to add knn graph to .uns
     """
     adata.uns[save_rep] = {
         "graph": kneighbors_graph(
@@ -93,10 +115,17 @@ def knn_graph(dist_matrix, k, adata, save_rep="knn"):
 def subset_uns_by_ID(adata, uns_keys, obs_col, IDs):
     """
     subset symmetrical distance matrices and knn graphs in adata.uns by one or more IDs defined in adata.obs
-        adata = AnnData object 
-        uns_keys = list of keys in adata.uns to subset. new adata.uns keys will be saved with ID appended to name (i.e. adata.uns['knn'] -> adata.uns['knn_ID1'])
-        obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
-        IDs = list of IDs to include in subset
+
+    Parameters:
+        adata (AnnData.AnnData): AnnData object 
+        uns_keys (list of str): list of keys in adata.uns to subset. new adata.uns keys will
+            be saved with ID appended to name (i.e. adata.uns['knn'] -> adata.uns['knn_ID1'])
+        obs_col (str): name of column in adata.obs to use as cell IDs (i.e. 'louvain')
+        IDs (list): list of IDs to include in subset
+
+    Returns:
+        AnnData.AnnData: adata is edited in place to generate new .uns keys corresponding to
+        IDs and chosen .obs column to split on
     """
     for key in uns_keys:
         tmp = adata.uns[key][
@@ -116,19 +145,23 @@ def recipe_fcc(
 ):
     """
     scanpy preprocessing recipe
-        adata = AnnData object with raw counts data in .X 
-        mito_names = substring encompassing mitochondrial gene names for calculation of mito expression
-        scale_arcsinh = multiplier following l1 normalization of counts prior to arcsinh transformation
-        target_sum = total sum of counts for each cell following sc.pp.normalize_total(). default 1e6 for TPM.
-        n_hvgs = number of highly variable genes to detect via seurat method
 
-    - calculates useful .obs and .var columns ('total_counts', 'pct_counts_mito', 'n_genes_by_counts', etc.)
-    - orders cells by total counts
-    - store raw counts (adata.layers['raw_counts'])
-    - GF-ICF normalization (adata.layers['X_gf-icf'])
-    - normalization and arcsinh transformation of counts (adata.layers['arcsinh_norm'])
-    - normalization and log1p transformation of counts (adata.X, adata.layers['log1p_norm'])
-    - identify highly-variable genes using seurat method (adata.var['highly_variable'])
+    Parameters:
+        adata (AnnData.AnnData): object with raw counts data in .X 
+        mito_names (str): substring encompassing mitochondrial gene names for calculation of mito expression
+        scale_arcsinh (int): multiplier following l1 normalization of counts prior to arcsinh transformation
+        target_sum (int): total sum of counts for each cell following sc.pp.normalize_total(). default 1e6 for TPM.
+        n_hvgs (int): number of highly variable genes to detect via seurat method
+
+    Returns:
+        AnnData.AnnData: adata is edited in place to include:
+        - useful .obs and .var columns ('total_counts', 'pct_counts_mito', 'n_genes_by_counts', etc.)
+        - cells ordered by total counts
+        - raw counts (adata.layers['raw_counts'])
+        - GF-ICF normalization (adata.layers['X_gf-icf'])
+        - normalization and arcsinh transformation of counts (adata.layers['arcsinh_norm'])
+        - normalization and log1p transformation of counts (adata.X, adata.layers['log1p_norm'])
+        - identify highly-variable genes using seurat method (adata.var['highly_variable'])
     """
     reorder_adata(adata, descending=True)  # reorder cells by total counts descending
 
@@ -170,9 +203,15 @@ def recipe_fcc(
 def find_centroids(adata, use_rep, obs_col="louvain"):
     """
     find cluster centroids
-        adata = AnnData object
-        use_rep = 'X' or adata.obsm key containing space to calculate centroids in (i.e. 'X_pca')
-        obs_col = adata.obs column name containing cluster IDs
+
+    Parameters:
+        adata (AnnData.AnnData): AnnData object
+        use_rep (str): 'X' or adata.obsm key containing space to calculate centroids in (i.e. 'X_pca')
+        obs_col (str): adata.obs column name containing cluster IDs
+
+    Returns:
+        AnnData.AnnData: adata is edited in place to include cluster centroids
+        (adata.uns["X_centroids"])
     """
     # calculate centroids
     clu_names = adata.obs[obs_col].unique().astype(str)
@@ -207,9 +246,14 @@ def find_centroids(adata, use_rep, obs_col="louvain"):
 def gf_icf_markers(adata, n_genes=5, group_by="louvain"):
     """
     return n_genes with top gf-icf scores for each group
-        adata = AnnData object preprocessed using gf_icf() or recipe_fcc() function
-        n_genes = number of top gf-icf scored genes to return per group
-        group_by = how to group cells to ID marker genes
+
+    Parameters:
+        adata (AnnData.AnnData): AnnData object preprocessed using gf_icf() or recipe_fcc() function
+        n_genes (int): number of top gf-icf scored genes to return per group
+        group_by (str): how to group cells to ID marker genes
+
+    Returns:
+        pd.DataFrame with top n_genes by gf-icf for each group
     """
     markers = pd.DataFrame()
     for clu in adata.obs[group_by].unique():
@@ -237,10 +281,16 @@ def cnmf_markers(adata, spectra_score_file, n_genes=30, key="cnmf"):
     """
     read in gene spectra score output from cNMF and save top gene loadings 
     for each usage as dataframe in adata.uns
-        adata = AnnData object
-        spectra_score_file = '<name>.gene_spectra_score.<k>.<dt>.txt' file from cNMF containing usage gene loadings
-        n_genes = number of top genes to list for each usage (rows of df)
-        key = prefix of adata.uns keys to save
+
+    Parameters:
+        adata (AnnData.AnnData): AnnData object
+        spectra_score_file (str): '<name>.gene_spectra_score.<k>.<dt>.txt' file from cNMF containing gene loadings
+        n_genes (int): number of top genes to list for each usage (rows of df)
+        key (str): prefix of adata.uns keys to save
+
+    Returns:
+        AnnData.AnnData: adata is edited in place to include gene spectra scores
+        (adata.uns["cnmf_spectra"]) and list of top genes by spectra score (adata.uns["cnmf_markers"])
     """
     # load Z-scored GEPs which reflect gene enrichment, save to adata.uns
     adata.uns["{}_spectra".format(key)] = pd.read_csv(
@@ -277,19 +327,18 @@ def rank_genes(
     """
     Plot rankings. [Adapted from scanpy.plotting._anndata.ranking]
     See, for example, how this is used in pl.pca_ranking.
-    Parameters
-    ----------
-    adata : AnnData
-        The data.
-    attr : {'var', 'obs', 'uns', 'varm', 'obsm'}
-        The attribute of AnnData that contains the score.
-    keys : str or list of str
-        The scores to look up an array from the attribute of adata.
-    indices : list of int
-        The column indices of keys for which to plot (e.g. [0,1,2] for first three keys)
-    Returns
-    -------
-    Returns matplotlib gridspec with access to the axes.
+
+    Parameters:
+        adata : AnnData
+            The data.
+        attr : {'var', 'obs', 'uns', 'varm', 'obsm'}
+            The attribute of AnnData that contains the score.
+        keys : str or list of str
+            The scores to look up an array from the attribute of adata.
+        indices : list of int
+            The column indices of keys for which to plot (e.g. [0,1,2] for first three keys)
+    Returns:
+        matplotlib gridspec with access to the axes.
     """
     # default to all usages
     if indices is None:
@@ -354,17 +403,27 @@ def rank_genes(
 
 def cnmf_load_results(adata, cnmf_dir, name, k, dt, key="cnmf", n_points=15, **kwargs):
     """
-    given adata object and corresponding cNMF output (cnmf_dir, name, k, dt to identify),
-    read in relevant results and save to adata object, and output plot of gene loadings
-    for each GEP usage.
-        adata = AnnData object
-        cnmf_dir = relative path to directory containing cNMF outputs
-        name = name of cNMF replicate
-        k = value used for consensus factorization
-        dt = distance threshold value used for consensus clustering
-        key = prefix of adata.uns keys to save
-        n_points = how many top genes to include in rank_genes() plot
-        **kwargs = keyword args to pass to cnmf_markers()
+    Load results of cNMF.
+    Given adata object and corresponding cNMF output (cnmf_dir, name, k, dt to identify),
+    read in relevant results and save to adata object inplace, and output plot of gene
+    loadings for each GEP usage.
+
+    Parameters:
+        adata (AnnData.AnnData): AnnData object
+        cnmf_dir (str): relative path to directory containing cNMF outputs
+        name (str): name of cNMF replicate
+        k (int): value used for consensus factorization
+        dt (int): distance threshold value used for consensus clustering
+        key (str): prefix of adata.uns keys to save
+        n_points (int): how many top genes to include in rank_genes() plot
+        **kwargs: keyword args to pass to cnmf_markers()
+
+    Returns:
+        AnnData.AnnData: adata is edited in place to include overdispersed genes
+            (adata.var["cnmf_overdispersed"]), usages (adata.obs["usage_#"]), gene
+            spectra scores (adata.uns["cnmf_spectra"]), and list of top genes by
+            spectra score (adata.uns["cnmf_markers"]).
+        gridspec.Gridspec: plot of n_points gene loadings for each cNMF usage
     """
     # read in cell usages
     usage = pd.read_csv(
@@ -412,17 +471,21 @@ def cnmf_load_results(adata, cnmf_dir, name, k, dt, key="cnmf", n_points=15, **k
 
 class DR_plot:
     """
-    class defining pretty plots of dimension-reduced embeddings such as PCA, t-SNE, and UMAP
-        DR_plot().plot(): utility plotting function that can be passed any numpy array in the `data` parameter
-                 .plot_IDs(): plot one or more cluster IDs on top of an .obsm from an `AnnData` object
-                 .plot_centroids(): plot cluster centroids defined using find_centroids() function on `AnnData` object
+    class defining pretty plots of dimension-reduced embeddings such as PCA/t-SNE/UMAP.
+
+    DR_plot().plot(): utility plotting function that can be passed any numpy array in the `data` parameter
+             .plot_IDs(): plot one or more cluster IDs on top of an .obsm from an `AnnData` object
+             .plot_centroids(): plot cluster centroids defined using find_centroids() function on `AnnData` object
     """
 
     def __init__(self, dim_name="dim", figsize=(5, 5), ax_labels=True):
         """
-        dim_name = how to label axes ('dim 1' on x and 'dim 2' on y by default)
-        figsize = size of resulting axes
-        ax_labels = draw arrows and dimension names in lower left corner of plot
+        constructor for DR_plot class.
+
+        Parameters:
+            dim_name (str): how to label axes ('dim 1' on x and 'dim 2' on y by default)
+            figsize (tuple of int): size of resulting axes
+            ax_labels (bool): draw arrows and dimension names in lower left corner of plot
         """
         self.fig, self.ax = plt.subplots(1, figsize=figsize)
         self.cmap = plt.get_cmap("plasma")
@@ -456,12 +519,14 @@ class DR_plot:
 
     def plot(self, data, color, pt_size=75, legend=None, save_to=None):
         """
-        general plotting function for dimensionality reduction outputs with cute arrows and labels
-            data = np.array containing variables in columns and observations in rows
-            color = list of length nrow(data) to determine how points should be colored
-            pt_size = size of points in plot
-            legend = None, 'full', or 'brief'
-            save_to = path to .png file to save output, or None
+        general plotting function for dimensionality reduction outputs.
+
+        Parameters:
+            data (np.array): variables in columns and observations in rows
+            color (list-like): list of length nrow(data) to determine how points should be colored
+            pt_size (int): size of points in plot
+            legend (None or str): 'full', or 'brief' as in sns. default is None.
+            save_to (str): path to .png file to save output, or None
         """
         sns.scatterplot(
             data[:, 0],
@@ -489,13 +554,15 @@ class DR_plot:
 
     def plot_IDs(self, adata, use_rep, obs_col, IDs="all", pt_size=75, save_to=None):
         """
-        general plotting function for dimensionality reduction outputs with cute arrows and labels
-            adata = anndata object to pull dimensionality reduction from
-            use_rep = adata.obsm key to plot from (i.e. 'X_pca')
-            obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
-            IDs = list of IDs to plot, graying out cells not assigned to those IDS (default 'all' IDs)
-            pt_size = size of points in plot
-            save_to = path to .png file to save output, or None
+        plotting function for adata objects with points colored by categorical IDs
+
+        Parameters:
+            adata (AnnData.AnnData): object to pull dimensionality reduction from
+            use_rep (str): adata.obsm key to plot from (i.e. 'X_pca')
+            obs_col (str): name of column in adata.obs to use as cell IDs (i.e. 'louvain')
+            IDs (list of str): list of IDs to plot, graying out cells not assigned to those IDS (default 'all' IDs)
+            pt_size (int): size of points in plot
+            save_to (str): path to .png file to save output, or None
         """
         plotter = adata.obsm[use_rep]
         # get color mapping from obs_col
@@ -555,18 +622,20 @@ class DR_plot:
         save_to=None,
     ):
         """
-        general plotting function for dimensionality reduction outputs with cute arrows and labels
-            adata = anndata object to pull dimensionality reduction from
-            use_rep = adata.obsm key to plot from (i.e. 'X_pca')
-            obs_col = name of column in adata.obs to use as cell IDs (i.e. 'louvain')
-            ctr_size = size of centroid points in plot
-            pt_size = size of points in plot
-            draw_edges = draw edges of minimum spanning tree between all centroids?
-            highlight_edges = list of edge IDs as tuples to highlight in red on plot
+        plotting function for adata objects with cluster centroids from calculate_centroids()
+
+        Parameters:
+            adata (AnnData.AnnData): object to pull dimensionality reduction from
+            use_rep (str): adata.obsm key to plot from (i.e. 'X_pca')
+            obs_col (str): name of column in adata.obs to use as cell IDs (i.e. 'louvain')
+            ctr_size (int): size of centroid points in plot
+            pt_size (int): size of points in plot
+            draw_edges (bool): draw edges of minimum spanning tree between all centroids?
+            highlight_edges (list): list of edge IDs as tuples to highlight in red on plot
                 e.g. `set(adata.uns['X_tsne_centroid_MST'].edges).difference(set(adata.uns['X_umap_centroid_MST'].edges))`
                 with output {(0,3), (0,7)} says that edges from centroid 0 to 3 and 0 to 7 are found in 'X_tsne_centroids'
                 but not in 'X_umap_centroids'. highlight the edges to show this.
-            save_to = path to .png file to save output, or None
+            save_to (str): path to .png file to save output, or None
         """
         # get color mapping from obs_col
         clu_names = adata.obs[obs_col].unique().astype(str)
