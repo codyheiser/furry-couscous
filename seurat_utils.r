@@ -18,10 +18,11 @@ remove.zeros <- function(counts, margin=1){
 
 arcsinh.norm <- function(counts, margin=2, norm='l1', scale=1000){
   # function to normalize and transform RNA counts data
-  #  counts = dataframe or matrix of RNA counts values
-  #  margin = normalize by dividing each element by maximum of its row (1) or column (2)
-  #  norm = if NULL, do not normalize before arcsinh tranforming. if "l1", normalize to maximum value along `margin`
-  #  scale = value to scale counts or normalized counts to before arcsinh tranformation
+  # Parameters:
+  #  counts (data.frame or matrix): RNA counts values
+  #  margin (int): normalize by dividing each element by maximum of its row (1) or column (2)
+  #  norm (str or NULL): if NULL, do not normalize before arcsinh tranforming. if "l1", normalize to maximum value along `margin`
+  #  scale (float): value to scale counts or normalized counts to before arcsinh tranformation
   if(is.null(norm)){
     out <- apply(counts*scale, MARGIN = c(1,2), FUN = asinh)
   }else if(norm=='l1'){
@@ -34,9 +35,10 @@ arcsinh.norm <- function(counts, margin=2, norm='l1', scale=1000){
 
 plot.DR <- function(results, colorby='c', name=''){
   # function to plot dimensionality reduction (DR) latent space
-  #  results = dataframe or matrix of latent dimensions
-  #  colorby = vector of values to color points by
-  #  name = string containing name of DR technique for axis labels (i.e. "t-SNE", "UMAP", "SIMLR")
+  # Parameters:
+  #  results (data.frame or matrix): latent dimensions
+  #  colorby (str or list): vector of values to color points by
+  #  name (str): string containing name of DR technique for axis labels (i.e. "t-SNE", "UMAP", "SIMLR")
   results %>%
     mutate(plt.colors = colorby) %>%
     ggplot(aes(x = results[,1], y = results[,2]))+
@@ -49,29 +51,30 @@ plot.DR <- function(results, colorby='c', name=''){
 }
 
 
-seurat.pipe <- function(counts, n.pcs=100, k=30, tsne=T, umap=F, perplexity=30, seed=18, ...){
+seurat.pipe <- function(counts, scale.factor=1e6, n.hvgs=2000, n.pcs=100, k=30, tsne=T, umap=F, perplexity=30, seed=18, ...){
   # normalize, feature select, scale, cluster, and reduce dimensionality via standard Seurat pipeline
-  #   counts = Seurat object, or matrix of counts in cells x genes format with cell and gene labels as rownames and colnames, respectively
-  #   n.pcs = number of PCs to calculate and use for downstream reductions
-  #   k = nearest-neighbor value to use for Knn graph to seed Louvain clustering algorithm
-  #   tsne = perform t-SNE on PCs?
-  #   umap = perform UMAP on PCs?
-  #   perplexity = parameter for t-SNE and UMAP reductions
-  #   seed = seed for random layout of t-SNE and UMAP for reproducible results
-  #   ... = options to pass to CreateSeuratObject()
+  # Parameters:
+  #   counts (seurat or matrix): cells x genes format with cell and gene labels as rownames and colnames, respectively
+  #   n.pcs (int): number of PCs to calculate and use for downstream reductions
+  #   k (int): nearest-neighbor value to use for Knn graph to seed Louvain clustering algorithm
+  #   tsne (bool): perform t-SNE on PCs?
+  #   umap (bool): perform UMAP on PCs?
+  #   perplexity (int): parameter for t-SNE and UMAP reductions
+  #   seed (int): seed for random layout of t-SNE and UMAP for reproducible results
+  #   ... (misc): options to pass to CreateSeuratObject()
   start.time <- Sys.time()
   
   if (class(counts)[1]!='Seurat'){
-    counts <- CreateSeuratObject(counts=counts, ...)                                        # initialize Seurat object to get feature names for scaling
+    counts <- CreateSeuratObject(counts=counts, ...)  # initialize Seurat object to get feature names for scaling
   }
   
   obj <- counts %>%
-    NormalizeData() %>%                                                                     # normalize counts within each cell and log1p-transform
-    FindVariableFeatures() %>%                                                              # feature selection using UMI binning
-    ScaleData(features = rownames(counts@assays$RNA@meta.features)) %>%                     # scale all features to prevent genes from taking over dataset
-    RunPCA(npcs = n.pcs) %>%                                                                # run principal component analysis
-    FindNeighbors(reduction = 'pca', dims = 1:n.pcs, k.param = k) %>%                       # build nn graph from PCs
-    FindClusters(random.seed = seed)                                                        # perform Louvain clustering using nn graph
+    NormalizeData(normalization.method = 'LogNormalize', scale.factor = scale.factor) %>%  # normalize counts within each cell and log1p-transform
+    FindVariableFeatures(nfeatures = n.hvgs) %>%  # feature selection using UMI binning
+    ScaleData(features = rownames(counts@assays$RNA@meta.features)) %>%  # scale all features to prevent genes from taking over dataset
+    RunPCA(npcs = n.pcs) %>%  # run principal component analysis
+    FindNeighbors(reduction = 'pca', dims = 1:n.pcs, k.param = k) %>%  # build nn graph from PCs
+    FindClusters(random.seed = seed)  # perform Louvain clustering using nn graph
   
   if (tsne) {
     obj <- obj %>% 
@@ -89,10 +92,10 @@ seurat.pipe <- function(counts, n.pcs=100, k=30, tsne=T, umap=F, perplexity=30, 
 
 set.cell.type <- function(obj, names){
   # create metadata field matching seurat_clusters to cell types
-  #   obj = Seurat object with Idents() set as desired for mapping - usually 'seurat_clusters'
-  #   names = list of strings containing cell type names for each ident.
-  #           should be in order of idents. 
-  #           i.e. if seurat_clusters = c(0,1,2), then names = c('stem','goblet','tuft') would mean {0:'stem',1:'goblet',2:'tuft'}
+  # Parameters:
+  #   obj (seurat): Idents() set as desired for mapping - usually 'seurat_clusters'
+  #   names (list of str): cell type names for each ident. should be in order of idents. 
+  #     i.e. if seurat_clusters = c(0,1,2), then names = c('stem','goblet','tuft') would mean {0:'stem',1:'goblet',2:'tuft'}
   types <- data.frame(seurat_clusters=levels(obj$seurat_clusters), cell.type=names)
   obj$cell.type <- types$cell.type[match(obj$seurat_clusters, types$seurat_clusters)]
   return(obj)
@@ -101,12 +104,13 @@ set.cell.type <- function(obj, names){
 
 dimplot.pie <- function(obj, group.by, split.by, r=2, reduction='tsne', ...){
   # plot reduced dimensions with ident contributions from condition (grouping.var) shown as pie charts
-  #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
-  #   group.by = meta.data column header to plot cells by
-  #   split.by = meta.data column header to split cells by for pie chart - usually 'orig.ident' for integrated samples
-  #   r = radius of each pie chart on the plot
-  #   reduction = type of dimension reduction from seurat object to use
-  #   ... = options to pass to seurat's DimPlot() function
+  # Parameters:
+  #   obj (seurat): Idents() set as desired - usually 'seurat_clusters'
+  #   group.by (str): meta.data column header to plot cells by
+  #   split.by (str): meta.data column header to split cells by for pie chart - usually 'orig.ident' for integrated samples
+  #   r (float): radius of each pie chart on the plot
+  #   reduction (str): type of dimension reduction from seurat object to use
+  #   ... (misc): options to pass to seurat's DimPlot() function
   start.time <- Sys.time()
   
   # get condition names from split.by argument
@@ -149,12 +153,13 @@ dimplot.pie <- function(obj, group.by, split.by, r=2, reduction='tsne', ...){
 
 fcc.corr.expr <- function(obj, ident, grouping.var, plot.out=T, n.genes.label=10, groups=NULL){
   # correlate average expression within an ident across condition (grouping.var) and return df
-  #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
-  #   ident = name of ident to correlate expression within
-  #   grouping.var = meta.data column header to group cells by - usually 'orig.ident' for integrated samples
-  #   plot.out = scatterplot correlation of expression?
-  #   n.genes.label = top n non-correlated genes to label on plot - default top 10
-  #   groups = list of two conditions to compare, i.e. c('normal','tumor'). default is first two results of levels(obj$grouping.var).
+  # Parameters:
+  #   obj (seurat): Idents() set as desired - usually 'seurat_clusters'
+  #   ident (str): name of ident to correlate expression within
+  #   grouping.var (str): meta.data column header to group cells by - usually 'orig.ident' for integrated samples
+  #   plot.out (bool): scatterplot correlation of expression?
+  #   n.genes.label (int): top n non-correlated genes to label on plot - default top 10
+  #   groups (list of str): two conditions to compare, i.e. c('normal','tumor'). default is first two results of levels(obj$grouping.var).
   start.time <- Sys.time()
   
   s <- subset(obj, idents=ident)
@@ -207,10 +212,11 @@ fcc.corr.expr <- function(obj, ident, grouping.var, plot.out=T, n.genes.label=10
 
 fcc.corr.expr.per.ident <- function(obj, grouping.var, n.genes.label=10, groups=NULL){
   # correlate average expression within an ident across condition (grouping.var) and return df
-  #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
-  #   grouping.var = meta.data column header to group cells by - usually 'orig.ident' for integrated samples
-  #   n.genes.label = top n non-correlated genes to label on each plot - default top 10
-  #   groups = list of two conditions to compare, i.e. c('normal','tumor'). default is first two results of levels(obj$grouping.var).
+  # Parameters:
+  #   obj (seurat): Idents() set as desired - usually 'seurat_clusters'
+  #   grouping.var (str): meta.data column header to group cells by - usually 'orig.ident' for integrated samples
+  #   n.genes.label (int): top n non-correlated genes to label on each plot - default top 10
+  #   groups (list of str): conditions to compare, i.e. c('normal','tumor'). default is first two results of levels(obj$grouping.var).
   start.time <- Sys.time()
   
   start.idents <- levels(Idents(obj))
@@ -258,10 +264,11 @@ fcc.corr.expr.per.ident <- function(obj, grouping.var, n.genes.label=10, groups=
 
 fcc.find.conserved.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cells.per.ident=300){
   # ID conserved cell type markers in each cluster across condition (grouping.var) and return df
-  #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
-  #   grouping.var = meta.data column header to group cells by - usually 'orig.ident' for integrated samples
-  #   n.genes.per.group = top n genes to return per ident - default 10
-  #   max.cells.per.ident = downsample idents when testing to speed up processing time - set to Inf to deactivate downsampling
+  # Parameters:
+  #   obj (seurat): Idents() set as desired - usually 'seurat_clusters'
+  #   grouping.var (str): meta.data column header to group cells by - usually 'orig.ident' for integrated samples
+  #   n.genes.per.group (int): top n genes to return per ident - default 10
+  #   max.cells.per.ident (int): downsample idents when testing to speed up processing time - set to Inf to deactivate downsampling
   start.time <- Sys.time()
   
   markers <- NULL
@@ -298,10 +305,11 @@ fcc.find.conserved.markers <- function(obj, grouping.var, n.genes.per.ident=10, 
 
 fcc.find.DE.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cells.per.ident=300){
   # ID differentially-expressed cell type markers in each cluster across condition (grouping.var) and return df
-  #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
-  #   grouping.var = meta.data column header to group cells by - usually 'orig.ident' for integrated samples
-  #   n.genes.per.group = top n genes to return per ident - default 10
-  #   max.cells.per.ident = downsample idents when testing to speed up processing time - set to Inf to deactivate downsampling
+  # Parameters:
+  #   obj (seurat): Idents() set as desired - usually 'seurat_clusters'
+  #   grouping.var (str): meta.data column header to group cells by - usually 'orig.ident' for integrated samples
+  #   n.genes.per.group (int): top n genes to return per ident - default 10
+  #   max.cells.per.ident (int): downsample idents when testing to speed up processing time - set to Inf to deactivate downsampling
   start.time <- Sys.time()
   
   start.idents <- levels(Idents(obj))
@@ -354,12 +362,12 @@ fcc.find.DE.markers <- function(obj, grouping.var, n.genes.per.ident=10, max.cel
 fcc.predictcelltype <- function(qdata, ref.expr, anntext="Query", corcutoff=0){
   # predict cell types based on expression correlation with reference database
   # adapted from scUnifrac (https://github.com/liuqivandy/scUnifrac)
-  #   qdata = matrix of counts in cells x genes format, with cell and gene labels as rownames and colnames, respectively
-  #   ref.expr = matrix of expression by cell type from reference database. 
-  #              can be loaded using `load(system.file("extdata", "ref.expr.Rdata", package = "scUnifrac"))`
-  #   anntext = string to annotate output heatmap with
-  #   corcutoff = minimum correlation value to require before returning cell type prediction
-  
+  # Parameters:
+  #   qdata (matrix): counts in cells x genes format, with cell and gene labels as rownames and colnames, respectively
+  #   ref.expr (matrix): expression by cell type from reference database. 
+  #     can be loaded using `load(system.file("extdata", "ref.expr.Rdata", package = "scUnifrac"))`
+  #   anntext (str): annotate output heatmap
+  #   corcutoff (float): minimum correlation value to require before returning cell type prediction
   commongene<-intersect(rownames(qdata),rownames(ref.expr))
   
   # require more than 300 genes in common to predict cell types
@@ -397,10 +405,11 @@ fcc.predictcelltype <- function(qdata, ref.expr, anntext="Query", corcutoff=0){
 fcc.predictcelltype.per.ident <- function(obj, ref.expr, corcutoff){
   # predict cell types for each ident in Seurat object based on expression correlation with reference database
   # adapted from scUnifrac (https://github.com/liuqivandy/scUnifrac)
-  #   obj = Seurat object with Idents() set as desired - usually 'seurat_clusters'
-  #   ref.expr = matrix of expression by cell type from reference database. 
-  #              can be loaded using `load(system.file("extdata", "ref.expr.Rdata", package = "scUnifrac"))`
-  #   corcutoff = minimum correlation value to require before returning cell type prediction
+  # Parameters:
+  #   obj (seurat): Idents() set as desired - usually 'seurat_clusters'
+  #   ref.expr (matrix): expression by cell type from reference database. 
+  #     can be loaded using `load(system.file("extdata", "ref.expr.Rdata", package = "scUnifrac"))`
+  #   corcutoff (float): minimum correlation value to require before returning cell type prediction
   start.time <- Sys.time()
   cell.type.pred <- NULL
   # use scUnifrac to predict cell type for each ident from expression
