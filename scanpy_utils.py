@@ -41,7 +41,7 @@ def reorder_adata(adata, descending=True):
     adata.obs = adata.obs.iloc[new_order].copy()
 
 
-def arcsinh(adata, layer=None, norm="l1", scale=1000):
+def arcsinh_norm(adata, layer=None, norm="l1", scale=1e6):
     """
     return arcsinh-normalized values for each element in anndata counts matrix
 
@@ -50,9 +50,9 @@ def arcsinh(adata, layer=None, norm="l1", scale=1000):
         layer (str or None): name of layer to perform arcsinh-normalization on. if None, use AnnData.X
         norm (str or None): normalization strategy following GF-ICF transform.
             None: do not normalize counts
-            'l1': divide each count by sum of counts for each cell
-            'l2': divide each count by sqrt of sum of squares of counts for each cell
-        scale (int): factor to scale normalized counts to; default 1000
+            "l1": divide each count by sum of counts for each cell (analogous to sc.pp.normalize_total)
+            "l2": divide each count by sqrt of sum of squares of counts for each cell
+        scale (int): factor to scale normalized counts to; default 1e6 for TPM
 
     Returns:
         AnnData.AnnData: adata is edited in place to add arcsinh normalization to .layers
@@ -65,45 +65,124 @@ def arcsinh(adata, layer=None, norm="l1", scale=1000):
     if norm is None:
         adata.layers["arcsinh_norm"] = np.arcsinh(mat * scale)
     else:
-        adata.layers["arcsinh_norm"] = np.arcsinh(normalize(mat, axis=1, norm=norm) * scale)
+        adata.layers["arcsinh_norm"] = np.arcsinh(
+            normalize(mat, axis=1, norm=norm) * scale
+        )
 
 
-def gf_icf(adata, layer=None, norm=None):
+def gf_icf(adata, layer=None, transform="arcsinh", norm=None):
     """
     return GF-ICF scores for each element in anndata counts matrix
 
     Parameters:
         adata (AnnData.AnnData): AnnData object
         layer (str or None): name of layer to perform GF-ICF normalization on. if None, use AnnData.X
+        transform (str): how to transform ICF weights. arcsinh is recommended to retain counts of genes
+            expressed in all cells. log transform eliminates these genes from the dataset.
         norm (str or None): normalization strategy following GF-ICF transform.
             None: do not normalize GF-ICF scores
-            'l1': divide each score by sum of scores for each cell
-            'l2': divide each score by sqrt of sum of squares of scores for each cell
+            "l1": divide each score by sum of scores for each cell (analogous to sc.pp.normalize_total)
+            "l2": divide each score by sqrt of sum of squares of scores for each cell
 
     Returns:
-        AnnData.AnnData: adata is edited in place to add GF-ICF normalization to .layers
+        AnnData.AnnData: adata is edited in place to add GF-ICF normalization to .layers["gf_icf"]
     """
     if layer is None:
-        # gene frequency in each cell (l1 norm along rows)
-        tf = adata.X / adata.X.sum(axis=1)[:,None]
-        # number of cells containing each gene (sum nonzero along columns)
-        nt = adata.X.astype(bool).sum(axis=0)
-
+        m = adata.X
     else:
-        # gene frequency in each cell (l1 norm along rows)
-        tf = adata.layers[layer] / adata.layers[layer].sum(axis=1)[:,None]
-        # number of cells containing each gene (sum nonzero along columns)
-        nt = adata.layers[layer].astype(bool).sum(axis=0)
+        m = adata.layers[layer]
+
+    # number of cells containing each gene (sum nonzero along columns)
+    nt = m.astype(bool).sum(axis=0)
+    assert np.all(
+        nt
+    ), "Encountered {} genes with 0 cells by counts. Remove these before proceeding (i.e. sc.pp.filter_genes(adata,min_cells=1))".format(
+        np.size(nt) - np.count_nonzero(nt)
+    )
+    # gene frequency in each cell (l1 norm along rows)
+    tf = m / m.sum(axis=1)[:, None]
 
     # inverse cell frequency (total cells / number of cells containing each gene)
-    # use "classic" approach here of adding 1 to prevent zero divisions
-    idf = np.log((adata.n_obs + 1) / (nt + 1))
-
-    # save normalized GF-ICF scores to .layers
-    if norm is None:
-        adata.layers["gf-icf"] = tf * idf
+    if transform == "arcsinh":
+        idf = np.arcsinh(adata.n_obs / nt)
+    elif transform == "log":
+        idf = np.log(adata.n_obs / nt)
     else:
-        adata.layers["gf-icf"] = normalize(tf * idf, norm=norm, axis=1)
+        raise ValueError("Please provide a valid transform (log or arcsinh).")
+
+    # save GF-ICF scores to .layers and total GF-ICF per cell in .obs
+    tf_idf = tf * idf
+    adata.obs["gf_icf_total"] = tf_idf.sum(axis=1)
+    if norm is None:
+        adata.layers["gf_icf"] = tf_idf
+    else:
+        adata.layers["gf_icf"] = normalize(tf_idf, norm=norm, axis=1)
+
+
+def recipe_fcc(
+    adata, X_final="raw_counts", mito_names="MT-", target_sum=1e6, n_hvgs=2000
+):
+    """
+    scanpy preprocessing recipe
+
+    Parameters:
+        adata (AnnData.AnnData): object with raw counts data in .X
+        X_final (str): which normalization should be left in .X slot?
+            ("raw_counts","gf_icf","log1p_norm","arcsinh_norm")
+        mito_names (str): substring encompassing mitochondrial gene names for
+            calculation of mito expression
+        target_sum (int): total sum of counts for each cell prior to arcsinh 
+            and log1p transformations; default 1e6 for TPM
+        n_hvgs (int): number of HVGs to calculate using Seurat method
+
+    Returns:
+        AnnData.AnnData: adata is edited in place to include:
+        - useful .obs and .var columns
+            ("total_counts", "pct_counts_mito", "n_genes_by_counts", etc.)
+        - cells ordered by "total_counts"
+        - raw counts (adata.layers["raw_counts"])
+        - GF-ICF transformation of counts (adata.layers["gf_icf"])
+        - arcsinh transformation of normalized counts
+            (adata.layers["arcsinh_norm"])
+        - log1p transformation of normalized counts
+            (adata.X, adata.layers["log1p_norm"])
+        - highly variable genes (adata.var["highly_variable"])
+    """
+    reorder_adata(adata, descending=True)  # reorder cells by total counts descending
+
+    # store raw counts before manipulation
+    adata.layers["raw_counts"] = adata.X.copy()
+
+    # identify mitochondrial genes
+    adata.var["mito"] = adata.var_names.str.contains(mito_names)
+    # calculate standard qc .obs and .var
+    sc.pp.calculate_qc_metrics(adata, qc_vars=["mito"], inplace=True)
+    # rank cells by total counts
+    adata.obs["ranked_total_counts"] = np.argsort(adata.obs["total_counts"])
+
+    # arcsinh transform (adata.layers["arcsinh_norm"]) and add total for visualization
+    arcsinh_norm(adata, norm="l1", scale=target_sum)
+    adata.obs["arcsinh_total_counts"] = np.arcsinh(adata.obs["total_counts"])
+
+    # GF-ICF transform (adata.layers["gf_icf"], adata.obs["gf_icf_total"])
+    gf_icf(adata)
+
+    # log1p transform (adata.layers["log1p_norm"])
+    sc.pp.normalize_total(
+        adata,
+        target_sum=target_sum,
+        layers=None,
+        layer_norm=None,
+        key_added="TPM_norm_factor",
+    )
+    sc.pp.log1p(adata)
+    adata.layers["log1p_norm"] = adata.X.copy()  # save to .layers
+
+    # HVGs
+    sc.pp.highly_variable_genes(adata, n_top_genes=n_hvgs, n_bins=20, flavor="seurat")
+
+    # set .X as desired for downstream processing; default raw_counts
+    adata.X = adata.layers[X_final].copy()
 
 
 def knn_graph(dist_matrix, k, adata, save_rep="knn"):
@@ -155,86 +234,6 @@ def subset_uns_by_ID(adata, uns_keys, obs_col, IDs):
         ] = tmp  # save new .uns key by appending IDs to original key name
 
 
-def recipe_fcc(
-    adata, X_final="raw_counts", mito_names="MT-", norm_gficf="l1", norm_arcsinh="l1", scale_arcsinh=1000, target_sum=1e6, n_hvgs=2000
-):
-    """
-    scanpy preprocessing recipe
-
-    Parameters:
-        adata (AnnData.AnnData): object with raw counts data in .X
-        X_final (str): which normalization should be left in .X slot?
-            ("raw_counts","gf-icf","log1p_norm","arcsinh_norm")
-        mito_names (str): substring encompassing mitochondrial gene names for
-            calculation of mito expression
-        norm_gficf (str or None): normalization strategy following GF-ICF transform.
-            None: do not normalize GF-ICF scores
-            'l1': divide each score by sum of scores for each cell
-            'l2': divide each score by sqrt of sum of squares of scores for each cell
-        norm_arcsinh (str or None): normalization strategy prior to arcsinh transform.
-            None: do not normalize counts
-            'l1': divide each count by sum of counts for each cell
-            'l2': divide each count by sqrt of sum of squares of counts for each cell
-        scale_arcsinh (int): multiplier following l1 normalization of counts prior to
-            arcsinh transformation
-        target_sum (int): total sum of counts for each cell following
-            sc.pp.normalize_total(). default 1e6 for TPM.
-        n_hvgs (int): number of highly variable genes to detect via seurat method
-
-    Returns:
-        AnnData.AnnData: adata is edited in place to include:
-        - useful .obs and .var columns
-            ('total_counts', 'pct_counts_mito', 'n_genes_by_counts', etc.)
-        - cells ordered by total counts
-        - raw counts (adata.layers['raw_counts'])
-        - GF-ICF normalization (adata.layers['gf-icf'])
-        - normalization and arcsinh transformation of counts
-            (adata.layers['arcsinh_norm'])
-        - normalization and log1p transformation of counts
-            (adata.X, adata.layers['log1p_norm'])
-        - identify highly-variable genes using seurat method
-            (adata.var['highly_variable'])
-    """
-    reorder_adata(adata, descending=True)  # reorder cells by total counts descending
-
-    # raw
-    adata.layers["raw_counts"] = adata.X.copy()  # store raw counts before manipulation
-
-    # obs/var
-    adata.var["mito"] = adata.var_names.str.contains(
-        mito_names
-    )  # identify mitochondrial genes
-    sc.pp.calculate_qc_metrics(
-        adata, qc_vars=["mito"], inplace=True
-    )  # calculate standard qc .obs and .var
-    adata.obs["ranked_total_counts"] = np.argsort(
-        adata.obs["total_counts"]
-    )  # rank cells by total counts
-
-    # arcsinh transform (adata.layers["arcsinh_norm"])
-    arcsinh(adata, norm=norm_arcsinh, scale=scale_arcsinh)
-
-    # gf-icf transform (adata.layers["gf-icf"])
-    gf_icf(adata, layer=None, norm=norm_gficf)
-
-    # log1p transform (adata.layers["log1p_norm"])
-    sc.pp.normalize_total(
-        adata,
-        target_sum=target_sum,
-        layers=None,
-        layer_norm=None,
-        key_added="TPM_norm_factor",
-    )
-    sc.pp.log1p(adata)
-    adata.layers["log1p_norm"] = adata.X.copy()  # save to .layers
-
-    # HVGs
-    sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=n_hvgs)
-
-    # set .X as desired for downstream processing; default raw_counts
-    adata.X = adata.layers[X_final].copy()
-
-
 def find_centroids(adata, use_rep, obs_col="louvain"):
     """
     find cluster centroids
@@ -278,7 +277,7 @@ def find_centroids(adata, use_rep, obs_col="louvain"):
     adata.uns["{}_centroid_MST".format(use_rep)] = nx.minimum_spanning_tree(G)
 
 
-def gf_icf_markers(adata, n_genes=5, group_by="louvain"):
+def gf_icf_markers(adata, n_genes=10, group_by="louvain"):
     """
     return n_genes with top gf-icf scores for each group
 
@@ -292,8 +291,8 @@ def gf_icf_markers(adata, n_genes=5, group_by="louvain"):
     """
     markers = pd.DataFrame()
     for clu in adata.obs[group_by].unique():
-        gf_icf_sum = adata.layers["gf-icf"][adata.obs[group_by] == str(clu)].sum(axis=0)
-        gf_icf_mean = adata.layers["gf-icf"][adata.obs[group_by] == str(clu)].mean(
+        gf_icf_sum = adata.layers["gf_icf"][adata.obs[group_by] == str(clu)].sum(axis=0)
+        gf_icf_mean = adata.layers["gf_icf"][adata.obs[group_by] == str(clu)].mean(
             axis=0
         )
         top = np.argpartition(gf_icf_sum, -n_genes)[-n_genes:]
@@ -303,8 +302,8 @@ def gf_icf_markers(adata, n_genes=5, group_by="louvain"):
                 {
                     group_by: np.repeat(clu, n_genes),
                     "gene": gene_IDs,
-                    "gf-icf_sum": gf_icf_sum[top],
-                    "gf-icf_mean": gf_icf_mean[top],
+                    "gf_icf_sum": gf_icf_sum[top],
+                    "gf_icf_mean": gf_icf_mean[top],
                 }
             )
         )
