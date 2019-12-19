@@ -348,8 +348,8 @@ def cnmf_markers(adata, spectra_score_file, n_genes=30, key="cnmf"):
 
 def rank_genes(
     adata,
-    attr="varm",
-    keys="usages",
+    attr="uns",
+    keys="cnmf_spectra",
     indices=None,
     labels=None,
     color="black",
@@ -397,8 +397,8 @@ def rank_genes(
     if n_panels <= 5:
         n_rows, n_cols = 1, n_panels
     else:
-        n_rows, n_cols = 2, int(n_panels / 2 + 0.5)
-    plt.figure(figsize=(n_cols * figsize[0], n_rows * figsize[1]))
+        n_rows, n_cols = int(n_panels / 4 + 0.5), 4
+    fig = plt.figure(figsize=(n_cols * figsize[0], n_rows * figsize[1]))
     left, bottom = 0.2 / n_cols, 0.13 / n_rows
     gs = gridspec.GridSpec(
         nrows=n_rows,
@@ -431,6 +431,7 @@ def rank_genes(
             (1.05 if score_max > 0 else 0.95) * score_max,
         )
         plt.tick_params(labelsize="x-large")
+        gs.tight_layout(fig)
     if show == False:
         return gs
 
