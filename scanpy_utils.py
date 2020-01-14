@@ -41,7 +41,7 @@ def reorder_adata(adata, descending=True):
     adata.obs = adata.obs.iloc[new_order].copy()
 
 
-def arcsinh_norm(adata, layer=None, norm="l1", scale=1e6):
+def arcsinh_norm(adata, layer=None, norm="l1", scale=None):
     """
     return arcsinh-normalized values for each element in anndata counts matrix
 
@@ -52,7 +52,7 @@ def arcsinh_norm(adata, layer=None, norm="l1", scale=1e6):
             None: do not normalize counts
             "l1": divide each count by sum of counts for each cell (analogous to sc.pp.normalize_total)
             "l2": divide each count by sqrt of sum of squares of counts for each cell
-        scale (int): factor to scale normalized counts to; default 1e6 for TPM
+        scale (int): factor to scale normalized counts to; if None, median total counts across all cells
 
     Returns:
         AnnData.AnnData: adata is edited in place to add arcsinh normalization to .layers
@@ -61,6 +61,9 @@ def arcsinh_norm(adata, layer=None, norm="l1", scale=1e6):
         mat = adata.X
     else:
         mat = adata.layers[layer]
+
+    if scale is None:
+        scale = np.median(mat.sum(axis=1))
 
     if norm is None:
         adata.layers["arcsinh_norm"] = np.arcsinh(mat * scale)
@@ -120,7 +123,7 @@ def gf_icf(adata, layer=None, transform="arcsinh", norm=None):
 
 
 def recipe_fcc(
-    adata, X_final="raw_counts", mito_names="MT-", target_sum=1e6, n_hvgs=2000
+    adata, X_final="raw_counts", mito_names="MT-", target_sum=None, n_hvgs=2000
 ):
     """
     scanpy preprocessing recipe
@@ -148,7 +151,8 @@ def recipe_fcc(
             (adata.X, adata.layers["log1p_norm"])
         - highly variable genes (adata.var["highly_variable"])
     """
-    reorder_adata(adata, descending=True)  # reorder cells by total counts descending
+    # reorder cells by total counts descending
+    reorder_adata(adata, descending=True)
 
     # store raw counts before manipulation
     adata.layers["raw_counts"] = adata.X.copy()
