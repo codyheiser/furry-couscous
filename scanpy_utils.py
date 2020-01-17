@@ -163,6 +163,8 @@ def recipe_fcc(
     sc.pp.calculate_qc_metrics(adata, qc_vars=["mito"], inplace=True)
     # rank cells by total counts
     adata.obs["ranked_total_counts"] = np.argsort(adata.obs["total_counts"])
+    # arcsinh-transformed total counts
+    adata.obs["arcsinh_n_genes_by_counts"] = np.arcsinh(adata.obs["n_genes_by_counts"])
 
     # arcsinh transform (adata.layers["arcsinh_norm"]) and add total for visualization
     arcsinh_norm(adata, norm="l1", scale=target_sum)
@@ -177,7 +179,7 @@ def recipe_fcc(
         target_sum=target_sum,
         layers=None,
         layer_norm=None,
-        key_added="TPM_norm_factor",
+        key_added="log1p_norm_factor",
     )
     sc.pp.log1p(adata)
     adata.layers["log1p_norm"] = adata.X.copy()  # save to .layers
