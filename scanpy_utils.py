@@ -95,23 +95,35 @@ def gf_icf(adata, layer=None, transform="arcsinh", norm=None):
     else:
         m = adata.layers[layer]
 
-    # number of cells containing each gene (sum nonzero along columns)
-    nt = m.astype(bool).sum(axis=0)
-    assert np.all(
-        nt
-    ), "Encountered {} genes with 0 cells by counts. Remove these before proceeding (i.e. sc.pp.filter_genes(adata,min_cells=1))".format(
-        np.size(nt) - np.count_nonzero(nt)
-    )
     # gene frequency in each cell (l1 norm along rows)
     tf = m / m.sum(axis=1)[:, None]
 
-    # inverse cell frequency (total cells / number of cells containing each gene)
-    if transform == "arcsinh":
-        idf = np.arcsinh(adata.n_obs / nt)
-    elif transform == "log":
-        idf = np.log(adata.n_obs / nt)
+    # number of cells containing each gene (sum nonzero along columns)
+    nt = m.astype(bool).sum(axis=0)
+
+    # if there are genes detected in zero cells, use "classic" method of pseudocount = 1
+    if not np.all(nt):
+        warnings.warn(
+            "Encountered {} genes with 0 cells by counts. Consider removing these before proceeding (i.e. sc.pp.filter_genes(adata,min_cells=1))".format(
+                np.size(nt) - np.count_nonzero(nt)
+            )
+        )
+        # inverse cell frequency (total cells / number of cells containing each gene)
+        if transform == "arcsinh":
+            idf = np.arcsinh((adata.n_obs + 1) / (nt + 1))
+        elif transform == "log":
+            idf = np.log((adata.n_obs + 1) / (nt + 1))
+        else:
+            raise ValueError("Please provide a valid transform (log or arcsinh).")
+    # otherwise, we can use "pure" GF-ICF transformation without potentially harmful pseudocount (preferred)
     else:
-        raise ValueError("Please provide a valid transform (log or arcsinh).")
+        # inverse cell frequency (total cells / number of cells containing each gene)
+        if transform == "arcsinh":
+            idf = np.arcsinh(adata.n_obs / nt)
+        elif transform == "log":
+            idf = np.log(adata.n_obs / nt)
+        else:
+            raise ValueError("Please provide a valid transform (log or arcsinh).")
 
     # save GF-ICF scores to .layers and total GF-ICF per cell in .obs
     tf_idf = tf * idf
@@ -160,7 +172,9 @@ def recipe_fcc(
     # identify mitochondrial genes
     adata.var["mito"] = adata.var_names.str.contains(mito_names)
     # calculate standard qc .obs and .var
-    sc.pp.calculate_qc_metrics(adata, qc_vars=["mito"], inplace=True)
+    sc.pp.calculate_qc_metrics(
+        adata, qc_vars=["mito"], inplace=True, percent_top=[10, 50, 100, 200, 500]
+    )
     # rank cells by total counts
     adata.obs["ranked_total_counts"] = np.argsort(adata.obs["total_counts"])
     # arcsinh-transformed total counts
