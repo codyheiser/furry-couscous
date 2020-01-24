@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import networkx as nx
+import warnings
 from scipy.spatial.distance import cdist  # unique pairwise and crosswise distances
 from sklearn.neighbors import kneighbors_graph  # simple K-nearest neighbors graph
 from sklearn.preprocessing import normalize
@@ -148,7 +149,8 @@ def recipe_fcc(
             calculation of mito expression
         target_sum (int): total sum of counts for each cell prior to arcsinh 
             and log1p transformations; default 1e6 for TPM
-        n_hvgs (int): number of HVGs to calculate using Seurat method
+        n_hvgs (int or None): number of HVGs to calculate using Seurat method
+            if None, do not calculate HVGs
 
     Returns:
         AnnData.AnnData: adata is edited in place to include:
@@ -161,7 +163,7 @@ def recipe_fcc(
             (adata.layers["arcsinh_norm"])
         - log1p transformation of normalized counts
             (adata.X, adata.layers["log1p_norm"])
-        - highly variable genes (adata.var["highly_variable"])
+        - highly variable genes if desired (adata.var["highly_variable"])
     """
     # reorder cells by total counts descending
     reorder_adata(adata, descending=True)
@@ -199,7 +201,8 @@ def recipe_fcc(
     adata.layers["log1p_norm"] = adata.X.copy()  # save to .layers
 
     # HVGs
-    sc.pp.highly_variable_genes(adata, n_top_genes=n_hvgs, n_bins=20, flavor="seurat")
+    if n_hvgs is not None:
+        sc.pp.highly_variable_genes(adata, n_top_genes=n_hvgs, n_bins=20, flavor="seurat")
 
     # set .X as desired for downstream processing; default raw_counts
     adata.X = adata.layers[X_final].copy()
