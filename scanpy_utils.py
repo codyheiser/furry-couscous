@@ -202,7 +202,9 @@ def recipe_fcc(
 
     # HVGs
     if n_hvgs is not None:
-        sc.pp.highly_variable_genes(adata, n_top_genes=n_hvgs, n_bins=20, flavor="seurat")
+        sc.pp.highly_variable_genes(
+            adata, n_top_genes=n_hvgs, n_bins=20, flavor="seurat"
+        )
 
     # set .X as desired for downstream processing; default raw_counts
     adata.X = adata.layers[X_final].copy()
@@ -347,31 +349,26 @@ def cnmf_markers(adata, spectra_score_file, n_genes=30, key="cnmf"):
 
     Returns:
         AnnData.AnnData: adata is edited in place to include gene spectra scores
-        (adata.uns["cnmf_spectra"]) and list of top genes by spectra score (adata.uns["cnmf_markers"])
+        (adata.varm["cnmf_spectra"]) and list of top genes by spectra score (adata.uns["cnmf_markers"])
     """
-    # load Z-scored GEPs which reflect gene enrichment, save to adata.uns
-    adata.uns["{}_spectra".format(key)] = pd.read_csv(
-        spectra_score_file, sep="\t", index_col=0
-    ).T
+    # load Z-scored GEPs which reflect gene enrichment, save to adata.varm
+    spectra = pd.read_csv(spectra_score_file, sep="\t", index_col=0).T
+    adata.varm["{}_spectra".format(key)] = spectra.values
     # obtain top n_genes for each GEP in sorted order and combine them into df
     top_genes = []
-    for gep in adata.uns["{}_spectra".format(key)].columns:
+    for gep in spectra.columns:
         top_genes.append(
-            list(
-                adata.uns["{}_spectra".format(key)]
-                .sort_values(by=gep, ascending=False)
-                .index[:n_genes]
-            )
+            list(spectra.sort_values(by=gep, ascending=False).index[:n_genes])
         )
     # save output to adata.uns
     adata.uns["{}_markers".format(key)] = pd.DataFrame(
-        top_genes, index=adata.uns["{}_spectra".format(key)].columns
+        top_genes, index=spectra.columns
     ).T
 
 
 def rank_genes(
     adata,
-    attr="uns",
+    attr="varm",
     keys="cnmf_spectra",
     indices=None,
     labels=None,
@@ -437,9 +434,9 @@ def rank_genes(
         indices = np.argsort(score)[::-1][: n_points + 1]
         for ig, g in enumerate(indices):
             plt.text(
-                ig,
-                score[g],
-                labels[g],
+                x=ig,
+                y=score[g],
+                s=labels[g],
                 color=color,
                 rotation="vertical",
                 verticalalignment="bottom",
@@ -459,7 +456,7 @@ def rank_genes(
         return gs
 
 
-def cnmf_load_results(adata, cnmf_dir, name, k, dt, key="cnmf", n_points=15, **kwargs):
+def cnmf_load_results(adata, cnmf_dir, name, k, dt, key="cnmf", **kwargs):
     """
     Load results of cNMF.
     Given adata object and corresponding cNMF output (cnmf_dir, name, k, dt to identify),
@@ -478,10 +475,9 @@ def cnmf_load_results(adata, cnmf_dir, name, k, dt, key="cnmf", n_points=15, **k
 
     Returns:
         AnnData.AnnData: adata is edited in place to include overdispersed genes
-            (adata.var["cnmf_overdispersed"]), usages (adata.obs["usage_#"]), gene
-            spectra scores (adata.uns["cnmf_spectra"]), and list of top genes by
-            spectra score (adata.uns["cnmf_markers"]).
-        gridspec.Gridspec: plot of n_points gene loadings for each cNMF usage
+            (adata.var["cnmf_overdispersed"]), usages (adata.obs["usage_#"],
+            adata.obsm["cnmf_usages"]), gene spectra scores (adata.varm["cnmf_spectra"]),
+            and list of top genes by spectra score (adata.uns["cnmf_markers"]).
     """
     # read in cell usages
     usage = pd.read_csv(
@@ -492,11 +488,15 @@ def cnmf_load_results(adata, cnmf_dir, name, k, dt, key="cnmf", n_points=15, **k
         index_col=0,
     )
     usage.columns = ["usage_" + str(col) for col in usage.columns]
+    # normalize usages to total for each cell
     usage_norm = usage.div(usage.sum(axis=1), axis=0)
     usage_norm.index = usage_norm.index.astype(str)
+    # add usages to .obs for visualization
     adata.obs = pd.merge(
         left=adata.obs, right=usage_norm, how="left", left_index=True, right_index=True
     )
+    # add usages as array in .obsm for dimension reduction
+    adata.obsm["cnmf_usages"] = usage_norm.values
 
     # read in overdispersed genes determined by cNMF and add as metadata to adata.var
     overdispersed = np.genfromtxt(
@@ -515,15 +515,6 @@ def cnmf_load_results(adata, cnmf_dir, name, k, dt, key="cnmf", n_points=15, **k
         ),
         key=key,
         **kwargs
-    )
-
-    # plot gene loadings from consensus file above
-    rank_genes(
-        adata,
-        attr="uns",
-        keys="{}_spectra".format(key),
-        labels=adata.uns["{}_spectra".format(key)].index,
-        n_points=n_points,
     )
 
 
