@@ -4,7 +4,7 @@ louvain==0.6.1
 matplotlib==3.0.3
 networkx==2.2
 numba==0.45.0
-numpy==1.17.4
+numpy==1.22.0
 pandas==0.25.3
 POT==0.6.0
 python-igraph==0.7.1.post6
